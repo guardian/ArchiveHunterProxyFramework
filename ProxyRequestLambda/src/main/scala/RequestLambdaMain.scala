@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 
-class RequestLambdaMain extends RequestHandler[SNSEvent,Unit]{
+class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder {
   /**
     * perform the request that we have been asked to
     * @param model RequestModel desribing the request to perform
@@ -49,13 +49,41 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit]{
         }
       case RequestType.PROXY=>
         Left("Creating proxies is not supported through this mechanism yet")
+      case _=>
+        Left(s"Don't understand requested action ${model.requestType}")
     }
   }
 
-  implicit val ecsClient:AmazonECS = AmazonECSClientBuilder.defaultClient()
+  def getEcsClient = AmazonECSClientBuilder.defaultClient()
+
+  implicit val ecsClient:AmazonECS = getEcsClient
+
+  case class Settings(clusterName:String, taskDefinitionName:String, taskContainerName:String, subnets:Option[Seq[String]], replyTopic:String)
+
+  def getSettings:Settings = {
+    Settings(
+      sys.env.get("CLUSTER_NAME") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify CLUSTER_NAME")
+      },
+      sys.env.get("TASK_DEFINITION") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify TASK_DEFINITION")
+      },
+      sys.env.get("TASK_CONTAINER") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify TASK_CONTAINER")
+      },
+      sys.env.get("SUBNET_LIST").map(_.split(",")),
+      sys.env.get("REPLY_TOPIC_ARN") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify REPLY_TOPIC_ARN")
+      }
+    )
+  }
 
   override def handleRequest(evt: SNSEvent, context: Context): Unit = {
-    val maybeReqeustsList = evt.getRecords.asScala.toSeq.map(rec=>{
+    val maybeReqeustsList = evt.getRecords.asScala.map(rec=>{
       io.circe.parser.parse(rec.getSNS.getMessage).flatMap(_.as[RequestModel])
     })
 
@@ -67,35 +95,11 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit]{
       })
     }
 
-    val clusterName = sys.env.get("CLUSTER_NAME") match {
-      case Some(str)=>str
-      case None=>throw new RuntimeException("You need to specify CLUSTER_NAME")
-    }
+    val settings = getSettings
 
-    val taskDefinitionName = sys.env.get("TASK_DEFINITION") match {
-      case Some(str)=>str
-      case None=>throw new RuntimeException("You need to specify TASK_DEFINITION")
-    }
-
-    val taskContainerName = sys.env.get("TASK_CONTAINER") match {
-      case Some(str)=>str
-      case None=>throw new RuntimeException("You need to specify TASK_CONTAINER")
-    }
-
-    val subnets = sys.env.get("SUBNET_LIST") match {
-      case Some(list)=>list.split(",")
-      case None=>throw new RuntimeException("You need to specify SUBNET_LIST")
-    }
-
-    val replyTopic = sys.env.get("REPLY_TOPIC_ARN") match {
-      case Some(str)=>str
-      case None=>throw new RuntimeException("You need to specify REPLY_TOPIC_ARN")
-    }
-
-
-    val taskMgr = new ContainerTaskManager(clusterName,taskDefinitionName,taskContainerName, subnets)
+    val taskMgr = new ContainerTaskManager(settings.clusterName,settings.taskDefinitionName,settings.taskContainerName, settings.subnets)
     val requests = maybeReqeustsList.collect({case Right(rq)=>rq})
-    val toWaitFor = Future.sequence(requests.map(rq=>processRequest(rq, replyTopic, taskMgr)))
+    val toWaitFor = Future.sequence(requests.map(rq=>processRequest(rq, settings.replyTopic, taskMgr)))
 
     val results = Await.result(toWaitFor, 60.seconds)
 

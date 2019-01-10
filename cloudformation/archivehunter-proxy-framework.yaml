@@ -1,5 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Proxying framework for ArchiveHunter
+Parameters:
+  App:
+    Type: String
+    Description: Application identifier for RiffRaff
+    Default: archivehunter
+  Stack:
+    Type: String
+    Description: Stack identifier for RiffRaff
+    Default: multimedia
+  Stage:
+    Type: String
+    AllowedValues:
+    - CODE
+    - DEV
+    - PROD
+    Description: Deployment stage
+  MainAppReplyQueueArn:
+    Type: String
+    Description: ARN of the SQS queue that the main app is listening on for reply messages
+    AllowedPattern: ^arn:aws:sqs:[\w\-]+:\d{12}:[^:]+$
+  ProxyingTaskImageRef:
+    Description: Docker path to the image used for proxying.
+    Type: String
+    Default: guardianmultimedia/archivehunter-proxying:90
 
 Resources:
+  InputTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: !GetAtt RequestLambda.Arn
+        Protocol: lambda
+
+  ReplyTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: !Ref MainAppReplyQueueArn
+        Protocol: sqs
+
+  RequestLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref InputTopic
+      FunctionName: !GetAtt RequestLambda.Arn
+
+  RequestLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: AccessBucket
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeInstances
+            - ec2:DescribeInstanceStatus
+            - ec2:DescribeTags
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+      - PolicyName: ContainerAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - ecs:List*
+            - ecs:Describe*
+            - ecs:*Task
+            Resource:
+            - !GetAtt ProxyingCluster.Arn
+            - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/*
+            - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/*
+      - PolicyName: ContainerRoleAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - iam:PassRole
+            Resource:
+            - !GetAtt ProxyGeneratorRole.Arn
+
+  RequestLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: gnm-multimedia-rr-deployables
+        S3Key: !Sub ${Stack}/${Stage}/archivehunter-proxyrequest-lambda/proxyRequestLambda.jar
+      Environment:
+        Variables:
+          CLUSTER_NAME: !Ref ProxyingCluster
+          TASK_DEFINITION: !Ref ProxyingTaskDefinition
+          TASK_CONTAINER: !Sub ${Stack}-${App}Proxy-${Stage}
+#          SUBNET_LIST:
+#            Fn::Join: [",",!Ref DeploySubnets]
+          REPLY_TOPIC_ARN: !GetAtt ReplyTopic.TopicName
+      Handler: RequestLambdaMain
+      FunctionName: !Sub archivehunter-requestlambda-${Stage}
+      MemorySize: 768
+      Role: !GetAtt RequestLambdaRole.Arn
+      Runtime: java8
+      Timeout: 60
+      Tags:
+      - Key: App
+        Value: !Ref App
+      - Key: Stack
+        Value: !Ref Stack
+      - Key: Stage
+        Value: !Ref Stage
+      Description: Handle analyse/thumbnail requests from ArchiveHunter
 
   ProxyGeneratorRole:
     Type: AWS::IAM::Role
@@ -29,6 +159,15 @@ Resources:
             - arn:aws:s3:::gnm-multimedia-*/*
             - arn:aws:s3:::mm-archive-*
             - arn:aws:s3:::mm-archive-*/*
+      - PolicyName: ReplyTopicAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+              - sns:SendMessage
+            Resource:
+              - !Ref ReplyTopic
       - PolicyName: LogsAccess
         PolicyDocument:
           Version: 2012-10-17
@@ -57,7 +196,7 @@ Resources:
   ProxyingCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub ${Stack}-${App}-${Stage}
+      ClusterName: !Sub ${Stack}-${App}proxy-${Stage}
 
   ProxyingTaskLogGroup:
     Type: AWS::Logs::LogGroup

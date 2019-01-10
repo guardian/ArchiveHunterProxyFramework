@@ -5,7 +5,7 @@ import com.amazonaws.services.ecs.model._
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success}
 
-class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskContainerName:String,subnets:Seq[String]){
+class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskContainerName:String,subnets:Option[Seq[String]]){
   private val logger = LogManager.getLogger(getClass)
 
   def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {
@@ -21,16 +21,20 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
     )
 
     //external IP is needed to pull images from Docker Hub
-    val netConfig = new NetworkConfiguration().withAwsvpcConfiguration(new AwsVpcConfiguration().withSubnets(subnets.asJava).withAssignPublicIp(AssignPublicIp.ENABLED))
+    val netConfig = subnets.map(subnetList=>new NetworkConfiguration().withAwsvpcConfiguration(new AwsVpcConfiguration().withSubnets(subnetList.asJava).withAssignPublicIp(AssignPublicIp.ENABLED)))
 
     val rq = new RunTaskRequest()
       .withCluster(clusterName)
       .withTaskDefinition(taskDefinitionName)
       .withOverrides(overrides)
       .withLaunchType(LaunchType.FARGATE)
-      .withNetworkConfiguration(netConfig)
 
-    val result = client.runTask(rq)
+      val finalRq = netConfig match {
+        case Some(config)=>rq.withNetworkConfiguration(config)
+        case None=>rq
+      }
+
+    val result = client.runTask(finalRq)
     val failures = result.getFailures.asScala
     if(failures.length>1){
       logger.error(s"Failed to launch task: ${failures.head.getArn} ${failures.head.getReason}")
