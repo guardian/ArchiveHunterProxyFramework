@@ -1,0 +1,13 @@
+import io.circe.{Decoder, Encoder}
+
+object RequestType extends Enumeration {
+  type RequestType = Value
+  val THUMBNAIL, PROXY, ANALYSE = Value
+}
+
+case class RequestModel (requestType: RequestType.Value, inputMediaUri: String, targetLocation:String, jobId:String)
+
+trait RequestModelEncoder {
+  implicit val requestTypeEncoder = Encoder.enumEncoder(RequestType)
+  implicit val requestTypeDecoder = Decoder.enumDecoder(RequestType)
+}
