@@ -24,7 +24,9 @@ Parameters:
     Description: Docker path to the image used for proxying.
     Type: String
     Default: guardianmultimedia/archivehunter-proxying:90
-
+  DeploySubnets:
+    Description: Subnets to deploy into.
+    Type: List<AWS::EC2::Subnet::Id>
 Resources:
   InputTopic:
     Type: AWS::SNS::Topic
@@ -113,9 +115,8 @@ Resources:
           CLUSTER_NAME: !Ref ProxyingCluster
           TASK_DEFINITION: !Ref ProxyingTaskDefinition
           TASK_CONTAINER: !Sub ${Stack}-${App}Proxy-${Stage}
-#          SUBNET_LIST:
-#            Fn::Join: [",",!Ref DeploySubnets]
-          REPLY_TOPIC_ARN: !GetAtt ReplyTopic.TopicName
+          SUBNET_LIST: !Join [",",!Ref DeploySubnets]
+          REPLY_TOPIC_ARN: !Ref ReplyTopic
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
@@ -165,7 +166,7 @@ Resources:
           Statement:
             Effect: Allow
             Action:
-              - sns:SendMessage
+              - sns:Publish
             Resource:
               - !Ref ReplyTopic
       - PolicyName: LogsAccess

@@ -31,7 +31,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test"
     ),
-    assemblyJarName in assembly := "requestLambda.jar",
+    assemblyJarName in assembly := "proxyRequestLambda.jar",
     assemblyMergeStrategy in assembly := {
       case PathList("javax", "servlet", xs @ _*)         => MergeStrategy.first
       case PathList(ps @ _*) if ps.last endsWith ".html" => MergeStrategy.first

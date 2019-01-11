@@ -96,6 +96,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       mockProcessRecord.apply(any,any,any) returns Future(Right("mock was called"))
 
       val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mock[AmazonECS]
         override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic")
 
         override def processRequest(model: RequestModel, replyTopic: String, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, replyTopic, taskMgr)

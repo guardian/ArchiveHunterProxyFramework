@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#expects arguments:  analyze_media_file.py {s3-uri-of-source} {http-uri-archivehunter}
+#expects arguments:  analyze_media_file.py {s3-uri-of-source} {sns-topic-arn}
 
 import requests
 import json
@@ -11,7 +11,7 @@ import time
 import traceback
 import subprocess
 from urlparse import urlparse
-
+import base64
 
 def s3_download(uri, local_path):
     """
@@ -58,6 +58,33 @@ def send_with_retry(callback_uri, content, attempt=0):
         send_with_retry(callback_uri, content, attempt+1)
 
 
+def send_sns(content, attempt=0):
+    """
+    send the given content (assumed to be json encoded as text) to SNS
+    :param content: string to send
+    :param attempt: attempt number.  Don't set this when calling
+    :return: message ID of send, or raises if send failed.
+    """
+    print content
+
+    client = boto3.client("sns")
+
+    try:
+        response = client.publish(
+            TopicArn=callback_uri,
+            Message=content
+        )
+        return response['MessageId']
+    except Exception as e:
+        print "ERROR: Could not send message: "
+        traceback.print_exc()
+        if(attempt<10):
+            time.sleep(10)
+            send_sns(content, attempt+1)
+        else:
+            raise
+
+
 def report_success(meta_dict):
     content = json.dumps({
         "status": "success",
@@ -65,7 +92,7 @@ def report_success(meta_dict):
         "metadata": meta_dict
     })
 
-    send_with_retry(callback_uri, content)
+    send_sns(content)
 
 
 def report_error(callback_uri, description, attempt=0):
@@ -77,10 +104,10 @@ def report_error(callback_uri, description, attempt=0):
     content = json.dumps({
         "status": "error",
         "input": download_uri,
-        "log": log
+        "log": base64.b64encode(log)
     })
     print "Logging error to server at {0}: {1}".format(callback_uri, content)
-    send_with_retry(callback_uri, content)
+    send_sns(callback_uri, content)
 
 
 #START MAIN
