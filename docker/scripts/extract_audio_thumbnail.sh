@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-echo extract_audio_thumbnail starting. Arguments: $1 $2 $3
+echo extract_audio_thumbnail starting. Arguments: $1 $2 $3 $4
 
 
 echo Converting audio...
@@ -36,16 +36,16 @@ if [ "$FFMPEG_EXIT" == "0" ] && [ "$SOX_EXIT" == "0" ] && [ "$GNUPLOT_EXIT" == "
 
     if [ "$?" == "0" ]; then
         echo Informing server...
-        curl -k -X POST $3 -d'{"status":"success","output":"'"$OUTPATH"'","input":"'"$1"'"}' --header "Content-Type: application/json"
+        aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
         ENCODED_LOG=$(echo $UPLOAD_LOG | base64)
 
-        curl -k -X POST $3 -d'{"status":"error","log":"'$ENCODED_LOG'","input":"'"$1"'"}' --header "Content-Type: application/json"
+        aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
     ENCODED_LOG=$(base64 /tmp/logfile)
-    curl -k -X POST $3 -d'{"status":"error","log":"'$ENCODED_LOG'","input":"'"$1"'"}' --header "Content-Type: application/json"
+    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi

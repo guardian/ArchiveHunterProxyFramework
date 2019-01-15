@@ -27,6 +27,16 @@ Parameters:
   DeploySubnets:
     Description: Subnets to deploy into.
     Type: List<AWS::EC2::Subnet::Id>
+
+Mappings:
+  RegionalBuckets:
+    eu-west-1:
+      Name: gnm-multimedia-rr-deployables
+    us-east-1:
+      Name: gnm-multimedia-use1-deployables
+    ap-south-1:
+      Name: gnm-multimedia-aps1-deployables
+
 Resources:
   InputTopic:
     Type: AWS::SNS::Topic
@@ -104,11 +114,38 @@ Resources:
             Resource:
             - !GetAtt ProxyGeneratorRole.Arn
 
+  # This role is assumed by the main app via STS to submit jobs and to connect to the reply topic
+  ManagementRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: AttachDetach
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+              - sns:Subscribe
+              - sns:Unsubscribe
+              Resource: !Ref ReplyTopic
+            - Effect: Allow
+              Action:
+              - sns:Publish
+              Resource: !Ref InputTopic
+
   RequestLambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
-        S3Bucket: gnm-multimedia-rr-deployables
+        S3Bucket: !FindInMap [RegionalBuckets, !Ref "AWS::Region", Name]
         S3Key: !Sub ${Stack}/${Stage}/archivehunter-proxyrequest-lambda/proxyRequestLambda.jar
       Environment:
         Variables:
@@ -226,3 +263,14 @@ Resources:
       RequiresCompatibilities:
       - FARGATE
       TaskRoleArn: !GetAtt ProxyGeneratorRole.Arn
+
+Outputs:
+  InputTopic:
+    Description: SNS topic that triggers actions
+    Value: !Ref InputTopic
+  ReplyTopic:
+    Description: SNS topic to notify main app of actions undertaken
+    Value: !Ref ReplyTopic
+  ManagementRole:
+    Description: IAM role to allow connection and management by the main app
+    Value: !GetAtt ManagementRole.Arn

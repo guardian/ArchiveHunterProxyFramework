@@ -6,7 +6,6 @@ import requests
 import json
 import sys
 import boto3
-from pprint import pprint
 import time
 import traceback
 import subprocess
@@ -89,6 +88,7 @@ def report_success(meta_dict):
     content = json.dumps({
         "status": "success",
         "input": download_uri,
+        "jobId": job_id,
         "metadata": meta_dict
     })
 
@@ -104,6 +104,7 @@ def report_error(callback_uri, description, attempt=0):
     content = json.dumps({
         "status": "error",
         "input": download_uri,
+        "jobId": job_id,
         "log": base64.b64encode(log)
     })
     print "Logging error to server at {0}: {1}".format(callback_uri, content)
@@ -113,10 +114,12 @@ def report_error(callback_uri, description, attempt=0):
 #START MAIN
 download_uri = sys.argv[1]
 callback_uri = sys.argv[2]
+job_id = sys.argv[3]
 
 try:
     print "Downloading from {0}".format(download_uri)
     print "Callback URI is {0}".format(callback_uri)
+    print "Job ID is {0}".format(job_id)
     s3_download(download_uri, "/tmp/mediafile")
     metadata = call_ffprobe("/tmp/mediafile")
     report_success(metadata)

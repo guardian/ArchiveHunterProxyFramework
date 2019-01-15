@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {http-uri-archivehunter}
-echo extract_video_thumbnail starting. Arguments: $1 $2 $3
+#expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {sns-output-topic} {job-id}
+echo extract_video_thumbnail starting. Arguments: $1 $2 $3 $4
 
 MIMETYPE=$(file -b --mime-type /tmp/videofile)
 echo $MIMETYPE | grep video
@@ -42,16 +42,16 @@ if [ "$FFMPEG_EXIT" == "0" ]; then
 
     if [ "$?" == "0" ]; then
         echo Informing server...
-        curl -k -X POST $3 -d'{"status":"success","output":"'"$OUTPATH"'","input":"'"$1"'"}' --header "Content-Type: application/json"
+        aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
         ENCODED_LOG=$(echo $UPLOAD_LOG | base64)
 
-        curl -k -X POST $3 -d'{"status":"error","log":"'$ENCODED_LOG'","input":"'"$1"'"}' --header "Content-Type: application/json"
+        aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
     ENCODED_LOG=$(echo $OUTLOG | base64)
-    curl -k -X POST $3 -d'{"status":"error","log":"'$ENCODED_LOG'","input":"'"$1"'"}' --header "Content-Type: application/json"
+    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi

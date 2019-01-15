@@ -21,7 +21,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     model.requestType match {
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
-          command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", model.inputMediaUri, model.targetLocation, replyTopic),
+          command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", model.inputMediaUri, model.targetLocation, replyTopic, model.jobId),
           environment = Map(),
           name = s"extract_thumbnail_${model.jobId.toString}",
           cpu = None
@@ -35,7 +35,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         }
       case RequestType.ANALYSE=>
         taskMgr.runTask(
-          command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", model.inputMediaUri, replyTopic),
+          command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", model.inputMediaUri, replyTopic, model.jobId),
           environment = Map(),
           name = s"extract_thumbnail_${model.jobId.toString}",
           cpu = None

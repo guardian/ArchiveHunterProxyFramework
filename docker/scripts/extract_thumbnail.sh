@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {http-uri-archivehunter}
+#expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {sns-update-topic} {job-id}
 
 if [ "$1" == "" ]; then
     echo "You must specific a source S3 URI"
@@ -20,7 +20,7 @@ fi
 echo Downloading source media $1...
 aws s3 cp "$1" /tmp/mediafile
 if [ "$?" != "0" ]; then
-    curl -k -X POST $3 -d'{"status":"error","log":"Could not download source media","input":"'"$1"'"}' --header "Content-Type: application/json"
+    aws sns publish --topic-arn $3 --message '{"status":"error","log":"Could not download source media","jobId":"'"$4"'","input":"'"$1"'"}'
     echo Could not download source media.
     exit 1
 fi
@@ -46,6 +46,6 @@ else
     echo ${MIMETYPE} files are not supported yet
     echo Script failed. Informing server...
     echo Server callback URL is $3
-    curl -k -X POST $3 -d'{"status":"error","log":"MIME type of file ('$MIMETYPE') not supported.","input":"'"$1"'"}' --header "Content-Type: application/json"
+    aws sns publish --topic-arn $3 --message '{"status":"error","log":"MIME type of file ('$MIMETYPE') not supported.","jobId":"'"$4"'","input":"'"$1"'"}'
     exit 1
 fi
