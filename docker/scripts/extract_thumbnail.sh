@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 #expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {sns-update-topic} {job-id}
+echo extract_thumbnail starting. Arguments: $1 $2 $3 $4
 
 if [ "$1" == "" ]; then
     echo "You must specific a source S3 URI"
@@ -14,6 +15,11 @@ fi
 
 if [ "$3" == "" ]; then
     echo "You must specify a callback URL"
+    exit 1
+fi
+
+if [ "$4" == "" ]; then
+    echo "You must specify a job ID"
     exit 1
 fi
 

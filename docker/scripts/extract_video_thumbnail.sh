@@ -3,6 +3,11 @@
 #expects arguments:  extract_thumbnail.sh {s3-uri-of-source} {s3-bucket-for-proxies} {sns-output-topic} {job-id}
 echo extract_video_thumbnail starting. Arguments: $1 $2 $3 $4
 
+if [ "$4" == "" ]; then
+    echo You need to pass a job ID!
+    exit 1
+fi
+
 MIMETYPE=$(file -b --mime-type /tmp/videofile)
 echo $MIMETYPE | grep video
 
