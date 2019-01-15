@@ -1,5 +1,6 @@
 import io.circe.{Decoder, Encoder}
 
+//This should be kept in-sync with the corresponding file in the main ArchiveHunter source
 object RequestType extends Enumeration {
   type RequestType = Value
   val THUMBNAIL, PROXY, ANALYSE = Value
