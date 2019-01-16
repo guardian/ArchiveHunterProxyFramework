@@ -13,6 +13,8 @@ echo $MIMETYPE | grep video
 
 if [ "$?" != "0" ]; then
     echo This is not a video file.
+    ENCODED_LOG=$(echo Provided file was not a video file | base64)
+    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     exit 1
 fi
 
@@ -24,8 +26,9 @@ if [ "$OUTPUT_QUALITY" == "" ]; then
     OUTPUT_QUALITY=2
 fi
 
+aws sns publish --topic-arn $3 --message '{"status":"running","jobId":"'"$4"'","input":"'"$1"'"}'
 echo Extracting thumbnail...
-echo ffmpeg -i /tmp/videofile -ss ${FRAME_LOCATION} -vframes 1 -q:v ${OUTPUT_QUALITY} /tmp/output.jpg
+echo ffmpeg -i /tmp/videofile -ss ${FRAME_LOCATION} -vframes 1 -q:v ${OUTPUT_QUALITY} -y /tmp/output.jpg
 
 
 OUTLOG=$(ffmpeg -i /tmp/videofile -ss ${FRAME_LOCATION} -vframes 1 -q:v ${OUTPUT_QUALITY} -y /tmp/output.jpg 2>&1)
@@ -40,7 +43,7 @@ echo inpath no ext is $INPATH_NO_EXT
 OUTPATH="s3://$2/$INPATH_NO_EXT.jpg"
 echo outpath is $OUTPATH
 
-if [ "$FFMPEG_EXIT" == "0" ]; then
+if [ "$FFMPEG_EXIT" == "0" ] && [ -f /tmp/output.jpg ]; then
     echo Uploading thumbnail...
     UPLOAD_LOG=`aws s3 cp /tmp/output.jpg "$OUTPATH" 2>&1`
     UPLOAD_EXIT=$?
