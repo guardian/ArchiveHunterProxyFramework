@@ -1,13 +1,8 @@
-import sbt._
-import Keys._
-ThisBuild / scalaVersion     := "2.12.8"
-ThisBuild / version          := "0.1.0-SNAPSHOT"
-ThisBuild / organization     := "com.example"
-ThisBuild / organizationName := "example"
-
 val awsSdkVersion = "1.11.346"
 val circeVersion = "0.9.3"
 val specs2Version = "4.3.2"
+
+enablePlugins(RiffRaffArtifact)
 
 lazy val root = (project in file("."))
   .settings(
@@ -74,3 +69,15 @@ lazy val `ecsAlertLambda` = (project in file("ECSAlertLambda"))
 
     }
   )
+
+val jsTargetDir = "target/riffraff/packages"
+
+riffRaffUploadArtifactBucket := Option("riffraff-artifact")
+riffRaffUploadManifestBucket := Option("riffraff-builds")
+riffRaffManifestProjectName := "multimedia:ArchiveHunterProxyFramework"
+riffRaffArtifactResources := Seq(
+  (assembly in requestLambda).value -> s"archivehunter-proxyrequest-lambda/${(assembly  in requestLambda).value.getName}",
+  (assembly  in ecsAlertLambda).value -> s"archivehunter-proxyecsalert-lambda/${(assembly in ecsAlertLambda).value.getName}",
+  (baseDirectory in Global in root).value / "riff-raff.yaml" -> "riff-raff.yaml",
+)
+

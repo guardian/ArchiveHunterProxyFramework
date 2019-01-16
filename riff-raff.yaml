@@ -1,0 +1,21 @@
+stacks: [multimedia]
+regions: [eu-west-1]
+templates:
+  lambda:
+    type: aws-lambda
+    parameters:
+      bucket: gnm-multimedia-rr-deployables
+      prefixStack: false
+
+deployments:
+  archivehunter-proxyrequest-lambda:
+    template: lambda
+    parameters:
+      functionNames: [archivehunter-requestlambda-]
+      fileName: proxyRequestLambda.jar
+
+#  archivehunter-proxyecsalert-lambda:
+#    template: lambda
+#    parameters:
+#      functionNames: [archivehunter-ecsalert-]
+#      fileName: ecsAlertLambda.jar

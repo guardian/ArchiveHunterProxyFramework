@@ -18,6 +18,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     * @return a Future containing either the task ARN or a string with an error message
     */
   def processRequest(model: RequestModel, replyTopic:String, taskMgr:ContainerTaskManager):Future[Either[String,String]] = Future {
+    println(s"Processing request $model with reply topic $replyTopic")
     model.requestType match {
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
