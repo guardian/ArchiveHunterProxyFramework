@@ -154,6 +154,7 @@ Resources:
           TASK_CONTAINER: !Sub ${Stack}-${App}Proxy-${Stage}
           SUBNET_LIST: !Join [",",!Ref DeploySubnets]
           REPLY_TOPIC_ARN: !Ref ReplyTopic
+          ETS_ROLE_ARN: !Ref TranscodingRole
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
@@ -263,6 +264,85 @@ Resources:
       RequiresCompatibilities:
       - FARGATE
       TaskRoleArn: !GetAtt ProxyGeneratorRole.Arn
+
+  #see https://docs.aws.amazon.com/elastictranscoder/latest/developerguide/access-control.html
+  TranscodingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: elastictranscoder.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: BucketRead
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '1'
+            Effect: Allow
+            Action:
+            - s3:Get*
+            - s3:ListBucket
+            - s3:Put*
+            - s3:*MultipartUpload*
+            Resource: "*"
+      - PolicyName: SNSPublish
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '2'
+            Effect: Allow
+            Action: sns:Publish
+            Resource: "*"
+      - PolicyName: BlockBucketOps
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '3'
+            Effect: Deny
+            Action:
+            - sns:*Permission*
+            - sns:*Delete*
+            - sns:*Remove*
+            - s3:*Policy*
+            - s3:*Delete*
+            Resource: "*"
+
+  TranscoderReplyTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: !GetAtt TranscoderReplyLambda.Arn
+        Protocol: lambda
+
+  TranscoderReplyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !FindInMap [RegionalBuckets, !Ref "AWS::Region", Name]
+        S3Key: !Sub ${Stack}/${Stage}/archivehunter-transcoderreply-lambda/transcoderReplyLambda.jar
+      Environment:
+        Variables:
+          REPLY_TOPIC_ARN: !Ref ReplyTopic
+          ETS_ROLE_ARN: !Ref TranscodingRole
+      Handler: ReplyLambdaMain
+      FunctionName: !Sub archivehunter-transcoderreply-${Stage}
+      MemorySize: 768
+      Role: !GetAtt TranscoderReplyLambdaRole.Arn
+      Runtime: java8
+      Timeout: 60
+      Tags:
+      - Key: App
+        Value: !Ref App
+      - Key: Stack
+        Value: !Ref Stack
+      - Key: Stage
+        Value: !Ref Stage
+      Description: Process reply messages from Elastic Transcoder
 
 Outputs:
   InputTopic:

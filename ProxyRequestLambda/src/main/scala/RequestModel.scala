@@ -6,7 +6,7 @@ object RequestType extends Enumeration {
   val THUMBNAIL, PROXY, ANALYSE = Value
 }
 
-case class RequestModel (requestType: RequestType.Value, inputMediaUri: String, targetLocation:String, jobId:String)
+case class RequestModel (requestType: RequestType.Value, inputMediaUri: String, targetLocation:String, jobId:String, createPipelineRequest: Option[CreatePipeline])
 
 trait RequestModelEncoder {
   implicit val requestTypeEncoder = Encoder.enumEncoder(RequestType)
