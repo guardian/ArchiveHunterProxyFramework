@@ -5,7 +5,7 @@ import org.apache.logging.log4j.LogManager
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
 
-object ETSPipelineManager {
+class ETSPipelineManager {
   private val logger = LogManager.getLogger(getClass)
 
   /**
@@ -15,7 +15,7 @@ object ETSPipelineManager {
     * @param outputBucket name of the required destination bucket
     * @return a Sequence containing zero or more pipelines. If no pipelines are found, the sequence is empty.
     */
-  protected def findPipelineFor(inputBucket:String, outputBucket:String)(implicit etsClient:AmazonElasticTranscoder) = {
+  def findPipelineFor(inputBucket:String, outputBucket:String)(implicit etsClient:AmazonElasticTranscoder) = {
     def getNextPage(matches:Seq[Pipeline], pageToken: Option[String]):Seq[Pipeline] = {
       val rq = new ListPipelinesRequest()
       val updatedRq = pageToken match {
@@ -92,4 +92,21 @@ object ETSPipelineManager {
       result.getPipeline
     }
 
+  def makeJobRequest(inputPath:String,outputPath:String, presetId:String, pipelineId:String, jobId:String)(implicit etsClient:AmazonElasticTranscoder) = {
+    val rq = new CreateJobRequest()
+      .withInput(new JobInput().withKey(inputPath))
+      .withOutput(new CreateJobOutput().withKey(outputPath).withPresetId(presetId))
+      .withPipelineId(pipelineId)
+      //base64 encoded version of this can be no more than 256 bytes!
+      .withUserMetadata(Map("archivehunter-job-id" -> jobId).asJava)
+    try {
+      val result = etsClient.createJob(rq)
+      println(s"Started transcode job with ID ${result.getJob.getId}")
+      Right(result.getJob.getId)
+    } catch {
+      case err:Throwable=>
+        println(s"ERROR: Could not start transcode job: ${err}")
+        Left(err.toString)
+    }
+  }
 }

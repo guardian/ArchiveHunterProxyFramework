@@ -1,6 +1,6 @@
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
-import com.amazonaws.services.elastictranscoder.AmazonElasticTranscoderClientBuilder
-import com.amazonaws.services.elastictranscoder.model.{CreatePipelineRequest, Notifications}
+import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
+import com.amazonaws.services.elastictranscoder.model._
 import com.amazonaws.services.lambda.runtime.{Context, RequestHandler}
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.sns.AmazonSNSClientBuilder
@@ -16,7 +16,15 @@ import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 
 class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder {
-  protected val snsClient = AmazonSNSClientBuilder.defaultClient()
+
+
+  def getSnsClient = AmazonSNSClientBuilder.defaultClient()
+  def getEcsClient = AmazonECSClientBuilder.defaultClient()
+  def getEtsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
+
+  implicit val ecsClient:AmazonECS = getEcsClient
+  protected val etsPipelineManager = new ETSPipelineManager
+  protected val snsClient = getSnsClient
 
   protected def randomStringFromCharList(length: Int, chars: Seq[Char]): String = {
     val sb = new StringBuilder
@@ -37,6 +45,30 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     randomStringFromCharList(length, chars)
   }
 
+  def doSetupPipeline(model:RequestModel, settings:Settings)(implicit etsClient:AmazonElasticTranscoder) = {
+    val rq = model.createPipelineRequest.get
+    val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
+    println(s"Attempting to create a pipeline request with name $pipelineName")
+    val createRq = new CreatePipelineRequest()
+      .withInputBucket(rq.fromBucket)
+      .withName(pipelineName)
+      .withNotifications(new Notifications().withCompleted(settings.etsMessageTopic).withError(settings.etsMessageTopic).withWarning(settings.etsMessageTopic).withProgressing(settings.etsMessageTopic))
+      .withOutputBucket(rq.toBucket)
+      .withRole(settings.etsRoleArn)
+    etsPipelineManager.createEtsPipeline(createRq,settings.etsRoleArn)
+      .flatMap(pipeline=>etsPipelineManager.waitForCompletion(pipeline.getId)) match {
+      case Success(pipelineId)=>
+        println(s"Successfully created pipeline: $pipelineId")
+        val replyMsg = MainAppReply.withPlainLog("success",Some(pipelineId),model.jobId,"",None)
+        snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
+        Right("Created pipeline")
+      case Failure(err)=>
+        println(s"Could not create pipeline: $err")
+        val replyMsg = MainAppReply.withPlainLog("error",None,model.jobId,"",Some(err.toString))
+        snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
+        Left("Could not create pipeline")
+    }
+  }
   /**
     * perform the request that we have been asked to
     * @param model RequestModel desribing the request to perform
@@ -47,29 +79,8 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     model.requestType match {
       case RequestType.SETUP_PIPELINE=>
         println("Received setup pipeline request")
-        implicit val etsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
-        val rq = model.createPipelineRequest.get
-        val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
-        println(s"Attempting to create a pipeline request with name $pipelineName")
-        val createRq = new CreatePipelineRequest()
-          .withInputBucket(rq.fromBucket)
-          .withName(pipelineName)
-          .withNotifications(new Notifications().withCompleted(settings.etsMessageTopic).withError(settings.etsMessageTopic).withWarning(settings.etsMessageTopic).withProgressing(settings.etsMessageTopic))
-          .withOutputBucket(rq.toBucket)
-          .withRole(settings.etsRoleArn)
-        ETSPipelineManager.createEtsPipeline(createRq,settings.etsRoleArn)
-          .flatMap(pipeline=>ETSPipelineManager.waitForCompletion(pipeline.getId)) match {
-          case Success(pipelineId)=>
-            println(s"Successfully created pipeline: $pipelineId")
-            val replyMsg = MainAppReply.withPlainLog("success",Some(pipelineId),model.jobId,"",None)
-            snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
-            Right("Created pipeline")
-          case Failure(err)=>
-            println(s"Could not create pipeline: $err")
-            val replyMsg = MainAppReply.withPlainLog("error",None,model.jobId,"",Some(err.toString))
-            snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
-            Left("Could not create pipeline")
-        }
+        implicit val etsClient = getEtsClient
+        doSetupPipeline(model, settings)
 
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
@@ -85,6 +96,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             println(s"Could not launch task: $err")
             Left(err.toString)
         }
+
       case RequestType.ANALYSE=>
         taskMgr.runTask(
           command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", model.inputMediaUri, settings.replyTopic, model.jobId),
@@ -100,15 +112,52 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             Left(err.toString)
         }
       case RequestType.PROXY=>
-        Left("Creating proxies is not supported through this mechanism yet")
+        implicit val etsClient = getEtsClient
+        val input = PathFunctions.breakdownS3Uri(model.inputMediaUri)
+        val output = PathFunctions.breakdownS3Uri(model.targetLocation)
+
+        println(s"Attempting to start transcode from $input to $output")
+        val presetId = model.proxyType match {
+          case Some(ProxyType.VIDEO)=>settings.videoPresetId
+          case Some(ProxyType.AUDIO)=>settings.audioPresetId
+          case Some(other)=>
+            val err=s"Don't have a preset available for proxy type ${other.toString}"
+            println(err)
+            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err))
+            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+            throw new RuntimeException(s"No preset available for ${other.toString}")
+          case None=>
+            val err=s"ERROR: No ProxyType parameter in request"
+            println(err)
+            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err))
+            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+            throw new RuntimeException(err)
+        }
+
+        etsPipelineManager.findPipelineFor(input._1,output._1).flatMap(pipelineList=>{
+          if(pipelineList.isEmpty){
+            println(s"No pipelines found for ${input._1} -> ${output._1}, attempting to create...")
+            Failure(new RuntimeException("No pipeline available to process this media"))
+          } else {
+            println(s"Starting job on pipeline ${pipelineList.head}")
+            Success(etsPipelineManager.makeJobRequest(input._2,output._2, presetId,pipelineList.head.getId,model.jobId))
+          }
+        }) match {
+          case Failure(err)=>
+            println(s"Unable to start transcoding job: $err")
+            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"))
+            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+            Left(err.toString)
+          case Success(_)=>
+            Right("Starting transcoding job")
+        }
       case _=>
-        Left(s"Don't understand requested action ${model.requestType}")
+        val err=s"Don't understand requested action ${model.requestType}"
+        val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err))
+        snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+        Left(err)
     }
   }
-
-  def getEcsClient = AmazonECSClientBuilder.defaultClient()
-
-  implicit val ecsClient:AmazonECS = getEcsClient
 
   def getSettings:Settings = {
     Settings(
@@ -136,7 +185,16 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       sys.env.get("ETS_MESSAGE_TOPIC") match {
         case Some(str)=>str
         case None=>throw new RuntimeException("You need to specify ETS_MESSAGE_TOPIC")
+      },
+      sys.env.get("VIDEO_PRESET_ID") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify VIDEO_PRESET_ID")
+      },
+      sys.env.get("AUDIO_PRESET_ID") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify AUDIO_PRESET_ID")
       }
+
     )
   }
 
@@ -167,5 +225,6 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       runFailures.foreach(err=>println(s"\t$err"))
     }
     println(s"${runFailures.length} out of ${results.length} failed, the rest succeeded")
+    if(runFailures.nonEmpty) throw new RuntimeException("Some jobs failed to process, see logs")
   }
 }

@@ -190,6 +190,8 @@ Resources:
           REPLY_TOPIC_ARN: !Ref ReplyTopic
           ETS_ROLE_ARN: !GetAtt TranscodingRole.Arn
           ETS_MESSAGE_TOPIC: !Ref TranscoderReplyTopic
+          VIDEO_TRANSCODING_PRESET_ID: !Ref VideoTranscodingPresetId
+          AUDIO_TRANSCODING_PRESET_ID: !Ref AudioTranscodingPresetId
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
