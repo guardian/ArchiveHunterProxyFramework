@@ -57,7 +57,7 @@ lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test"
     ),
-    assemblyJarName in assembly := "proxyRequestLambda.jar",
+    assemblyJarName in assembly := "transcoderReplyLambda.jar",
     assemblyMergeStrategy in assembly := {
       case PathList("javax", "servlet", xs @ _*)         => MergeStrategy.first
       case PathList(ps @ _*) if ps.last endsWith ".html" => MergeStrategy.first

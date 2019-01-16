@@ -27,6 +27,14 @@ Parameters:
   DeploySubnets:
     Description: Subnets to deploy into.
     Type: List<AWS::EC2::Subnet::Id>
+  VideoTranscodingPresetId:
+    Description: ETS Preset ID to use when transcoding video proxies
+    Type: String
+    Default: 1387374611767-d52fja
+  AudioTranscodingPresetId:
+    Description: ETS Preset ID to use when transcoding video proxies
+    Type: String
+    Default: 1351620000001-300040
 
 Mappings:
   RegionalBuckets:
@@ -113,6 +121,32 @@ Resources:
             - iam:PassRole
             Resource:
             - !GetAtt ProxyGeneratorRole.Arn
+            - !GetAtt TranscodingRole.Arn
+      - PolicyName: SNSAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - sns:Publish
+            Resource:
+            - !Ref ReplyTopic
+      - PolicyName: TranscoderAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - "elastictranscoder:*"
+            Resource:
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:pipeline/*
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:job/*
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:preset/${VideoTranscodingPresetId}
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:preset/${AudioTranscodingPresetId}
+          - Effect: Allow
+            Action:
+              - elastictranscoder:CreatePipeline
+            Resource: "*"
 
   # This role is assumed by the main app via STS to submit jobs and to connect to the reply topic
   ManagementRole:
@@ -154,7 +188,7 @@ Resources:
           TASK_CONTAINER: !Sub ${Stack}-${App}Proxy-${Stage}
           SUBNET_LIST: !Join [",",!Ref DeploySubnets]
           REPLY_TOPIC_ARN: !Ref ReplyTopic
-          ETS_ROLE_ARN: !Ref TranscodingRole
+          ETS_ROLE_ARN: !GetAtt TranscodingRole.Arn
           ETS_MESSAGE_TOPIC: !Ref TranscoderReplyTopic
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
@@ -329,7 +363,7 @@ Resources:
       Environment:
         Variables:
           REPLY_TOPIC_ARN: !Ref ReplyTopic
-          ETS_ROLE_ARN: !Ref TranscodingRole
+          ETS_ROLE_ARN: !GetAtt TranscodingRole.Arn
       Handler: ReplyLambdaMain
       FunctionName: !Sub archivehunter-transcoderreply-${Stage}
       MemorySize: 768
@@ -344,6 +378,55 @@ Resources:
       - Key: Stage
         Value: !Ref Stage
       Description: Process reply messages from Elastic Transcoder
+
+  TranscoderReplyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: AccessBucket
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeInstances
+            - ec2:DescribeInstanceStatus
+            - ec2:DescribeTags
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+      - PolicyName: SNSAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - sns:Publish
+            Resource:
+            - !Ref ReplyTopic
+
+  TranscoderLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref TranscoderReplyTopic
+      FunctionName: !GetAtt TranscoderReplyLambda.Arn
 
 Outputs:
   InputTopic:

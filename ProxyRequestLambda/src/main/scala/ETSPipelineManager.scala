@@ -83,6 +83,7 @@ object ETSPipelineManager {
     */
   def createEtsPipeline(rq:CreatePipelineRequest, transcodingRole:String)(implicit etsClient:AmazonElasticTranscoder) = Try {
       val result = etsClient.createPipeline(rq)
+      println(result.toString)
       val warnings = result.getWarnings.asScala
       if(warnings.nonEmpty){
         logger.warn("Warnings were receieved when creating pipeline:")

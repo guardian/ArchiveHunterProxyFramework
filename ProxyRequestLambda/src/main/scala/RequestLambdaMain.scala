@@ -46,9 +46,11 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     println(s"Processing request $model with reply topic ${settings.replyTopic}")
     model.requestType match {
       case RequestType.SETUP_PIPELINE=>
+        println("Received setup pipeline request")
         implicit val etsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
         val rq = model.createPipelineRequest.get
         val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
+        println(s"Attempting to create a pipeline request with name $pipelineName")
         val createRq = new CreatePipelineRequest()
           .withInputBucket(rq.fromBucket)
           .withName(pipelineName)
@@ -58,10 +60,12 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         ETSPipelineManager.createEtsPipeline(createRq,settings.etsRoleArn)
           .flatMap(pipeline=>ETSPipelineManager.waitForCompletion(pipeline.getId)) match {
           case Success(pipelineId)=>
+            println(s"Successfully created pipeline: $pipelineId")
             val replyMsg = MainAppReply.withPlainLog("success",Some(pipelineId),model.jobId,"",None)
             snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
             Right("Created pipeline")
           case Failure(err)=>
+            println(s"Could not create pipeline: $err")
             val replyMsg = MainAppReply.withPlainLog("error",None,model.jobId,"",Some(err.toString))
             snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
             Left("Could not create pipeline")
