@@ -19,7 +19,7 @@ if [ "$?" != "0" ]; then
 fi
 
 if [ "$FRAME_LOCATION" == "" ]; then
-    FRAME_LOCATION=00:00:10
+    FRAME_LOCATION=00:00:08
 fi
 
 if [ "$OUTPUT_QUALITY" == "" ]; then
