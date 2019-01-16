@@ -66,7 +66,6 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
             Left("Could not create pipeline")
         }
-
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
           command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", model.inputMediaUri, model.targetLocation, settings.replyTopic, model.jobId),
