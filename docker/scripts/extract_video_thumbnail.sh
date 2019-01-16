@@ -43,6 +43,7 @@ echo outpath is $OUTPATH
 if [ "$FFMPEG_EXIT" == "0" ]; then
     echo Uploading thumbnail...
     UPLOAD_LOG=`aws s3 cp /tmp/output.jpg "$OUTPATH" 2>&1`
+    echo ${UPLOAD_LOG}
     echo Server callback URL is $3
 
     if [ "$?" == "0" ]; then
