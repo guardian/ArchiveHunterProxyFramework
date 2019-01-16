@@ -2,7 +2,7 @@ import com.amazonaws.services.elastictranscoder.AmazonElasticTranscoder
 import com.amazonaws.services.elastictranscoder.model._
 import org.apache.logging.log4j.LogManager
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
 
 object ETSPipelineManager {
@@ -52,22 +52,37 @@ object ETSPipelineManager {
   }
 
   /**
+    * wait until the pipeline is in an Active state
+    * @param pipelineId pipeline ID to wait on
+    * @param etsClient implicitly provided ETS client
+    */
+  def waitForCompletion(pipelineId:String)(implicit etsClient:AmazonElasticTranscoder):Try[String] = {
+    while(true){
+       getPipelineStatus(pipelineId) match {
+         case Success(status)=>
+           println(s"Status of pipeline $pipelineId is $status")
+           if (status.toLowerCase == "active") {
+            return Success(pipelineId)
+           } else if(status.toLowerCase=="error") {
+            return Failure(new RuntimeException("Could not create pipeline"))
+           }
+         case Failure(err)=>
+           println(s"ERROR: Could not get pipeline status: $err")
+       }
+      Thread.sleep(1000)
+    }
+    Failure(new RuntimeException("Code shouldn't reach here"))
+  }
+
+  /**
     * kick of the creation of a pipeline. NOTE: the Pipeline object returned will not be usable until it's in an active state.
     * @param pipelineName name of the pipeline to create
     * @param inputBucket input bucket it should point to
     * @param outputBucket output bucket it should point to
     * @return
     */
-  protected def createEtsPipeline(rq:CreatePipeline, transcodingRole:String)(implicit etsClient:AmazonElasticTranscoder) = {
-    val createRq = new CreatePipelineRequest()
-      .withInputBucket(rq.fromBucket)
-      .withName(pipelineName)
-      .withNotifications(new Notifications().withCompleted(rq.completionTopic).withError(rq.errorTopic).withWarning(rq.warningTopic).withProgressing(warningNotificationTopic))
-      .withOutputBucket(rq.toBucket)
-      .withRole(transcodingRole)
-
-    Try {
-      val result = etsClient.createPipeline(createRq)
+  def createEtsPipeline(rq:CreatePipelineRequest, transcodingRole:String)(implicit etsClient:AmazonElasticTranscoder) = Try {
+      val result = etsClient.createPipeline(rq)
       val warnings = result.getWarnings.asScala
       if(warnings.nonEmpty){
         logger.warn("Warnings were receieved when creating pipeline:")
@@ -75,6 +90,5 @@ object ETSPipelineManager {
       }
       result.getPipeline
     }
-  }
 
 }

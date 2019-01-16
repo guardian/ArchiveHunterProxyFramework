@@ -155,6 +155,7 @@ Resources:
           SUBNET_LIST: !Join [",",!Ref DeploySubnets]
           REPLY_TOPIC_ARN: !Ref ReplyTopic
           ETS_ROLE_ARN: !Ref TranscodingRole
+          ETS_MESSAGE_TOPIC: !Ref TranscoderReplyTopic
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768

@@ -15,7 +15,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       "com.amazonaws" % "aws-java-sdk-lambda" % awsSdkVersion,
       "com.amazonaws" % "aws-lambda-java-events" % "2.1.0",
       "com.amazonaws" % "aws-lambda-java-core" % "1.0.0",
-      "com.amazonaws" % "aws-java-sdk-sqs"% awsSdkVersion,
+      "com.amazonaws" % "aws-java-sdk-sns"% awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-ecs" % awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-elastictranscoder" % awsSdkVersion,
       "io.circe" %% "circe-core" % circeVersion,

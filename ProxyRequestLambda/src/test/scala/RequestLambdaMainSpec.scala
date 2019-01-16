@@ -19,14 +19,15 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
     "call out to taskMgr.RunTask for a THUMBNAIL action" in {
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id")
+      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
       }
-      val result = Await.result(toTest.processRequest(fakeRequest,"fake-reply-topic",mockedTaskMgr), 5 seconds)
+      val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
       there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
       result must beRight("fake-task-arn")
@@ -35,14 +36,15 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
     "return left if RunTask signifies failure" in {
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id")
+      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
       }
-      val result = Await.result(toTest.processRequest(fakeRequest,"fake-reply-topic",mockedTaskMgr), 5 seconds)
+      val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
       there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
       result must beLeft("java.lang.RuntimeException: My hovercraft is full of eels")
@@ -51,14 +53,15 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
     "call out to taskMgr.RunTask for an ANALYSE action" in {
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","","fake-job-id")
+      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","","fake-job-id",None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
       }
-      val result = Await.result(toTest.processRequest(fakeRequest,"fake-reply-topic",mockedTaskMgr), 5 seconds)
+      val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
       there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
       result must beRight("fake-task-arn")
@@ -67,14 +70,15 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
     "return left if RunTask signifies failure" in {
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","fake-target-location","fake-job-id")
+      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","fake-target-location","fake-job-id",None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
       }
-      val result = Await.result(toTest.processRequest(fakeRequest,"fake-reply-topic",mockedTaskMgr), 5 seconds)
+      val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
       there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
       result must beLeft("java.lang.RuntimeException: My hovercraft is full of eels")
@@ -84,7 +88,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
   "RequestLambdaMain.handleRequest" should {
     "convert SNS messages into our message format and not choke on errors" in {
-      val actualRequest = RequestModel(RequestType.ANALYSE,"input-uri","target-location","job-id")
+      val actualRequest = RequestModel(RequestType.ANALYSE,"input-uri","target-location","job-id",None)
       val recods = List(
         new SNSRecord().withSns(new SNSEvent.SNS().withMessage(actualRequest.asJson.toString)),
         new SNSRecord().withSns(new SNSEvent.SNS().withMessage("{\"field\":\"invalidmessage\"}")),
@@ -92,14 +96,14 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       )
       val evt = new SNSEvent().withRecords(recods.asJava)
 
-      val mockProcessRecord = mock[Function3[RequestModel,String,ContainerTaskManager,Future[Either[String,String]]]]
+      val mockProcessRecord = mock[Function3[RequestModel,Settings,ContainerTaskManager,Future[Either[String,String]]]]
       mockProcessRecord.apply(any,any,any) returns Future(Right("mock was called"))
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mock[AmazonECS]
-        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic")
+        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic")
 
-        override def processRequest(model: RequestModel, replyTopic: String, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, replyTopic, taskMgr)
+        override def processRequest(model: RequestModel, settings:Settings, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, settings, taskMgr)
       }
 
       val result = toTest.handleRequest(evt, mock[Context])
