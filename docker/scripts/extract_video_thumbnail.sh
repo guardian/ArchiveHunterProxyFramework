@@ -13,7 +13,7 @@ echo $MIMETYPE | grep video
 
 if [ "$?" != "0" ]; then
     echo This is not a video file.
-    ENCODED_LOG=$(echo Provided file was not a video file | base64)
+    ENCODED_LOG=$(echo Provided file was not a video file |  base64 -w0)
     aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     exit 1
 fi
@@ -55,13 +55,13 @@ if [ "$FFMPEG_EXIT" == "0" ] && [ -f /tmp/output.jpg ]; then
         aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
-        ENCODED_LOG=$(echo $UPLOAD_LOG | base64)
+        ENCODED_LOG=$(echo $UPLOAD_LOG | base64 -w0)
 
         aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
-    ENCODED_LOG=$(echo $OUTLOG | base64)
+    ENCODED_LOG=$(echo $OUTLOG |  base64 -w0)
     aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi
