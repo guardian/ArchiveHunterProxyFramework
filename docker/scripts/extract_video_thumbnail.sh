@@ -43,10 +43,11 @@ echo outpath is $OUTPATH
 if [ "$FFMPEG_EXIT" == "0" ]; then
     echo Uploading thumbnail...
     UPLOAD_LOG=`aws s3 cp /tmp/output.jpg "$OUTPATH" 2>&1`
+    UPLOAD_EXIT=$?
     echo ${UPLOAD_LOG}
     echo Server callback URL is $3
 
-    if [ "$?" == "0" ]; then
+    if [ "${UPLOAD_EXIT}" == "0" ]; then
         echo Informing server...
         aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
