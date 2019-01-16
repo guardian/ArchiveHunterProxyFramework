@@ -136,7 +136,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
 
         etsPipelineManager.findPipelineFor(input._1,output._1).flatMap(pipelineList=>{
           if(pipelineList.isEmpty){
-            println(s"No pipelines found for ${input._1} -> ${output._1}, attempting to create...")
+            println(s"No pipelines found for ${input._1} -> ${output._1}.")
             Failure(new RuntimeException("No pipeline available to process this media"))
           } else {
             println(s"Starting job on pipeline ${pipelineList.head}")
