@@ -94,7 +94,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val mockedPipelineManager = mock[ETSPipelineManager]
       mockedPipelineManager.findPipelineFor(any,any)(any) returns Success(Seq(mockedPipeline))
-      mockedPipelineManager.makeJobRequest(any,any,any,any,any)(any) returns Right("job-id")
+      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Right("job-id")
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
       val mockedEtsClient = mock[AmazonElasticTranscoder]
@@ -114,7 +114,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val result = Await.result(toTest.processRequest(fakeRequest, mockedSettings, mockedTaskMgr), 5 seconds)
       there was one(mockedPipelineManager).findPipelineFor("mediabucket","proxybucket")(mockedEtsClient)
       there was no(mockedPipelineManager).createEtsPipeline(any,any)(any)
-      there was one(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id")(mockedEtsClient)
+      there was one(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
       result must beRight
     }
 
@@ -124,7 +124,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val mockedPipelineManager = mock[ETSPipelineManager]
       mockedPipelineManager.findPipelineFor(any,any)(any) returns Success(Seq())
-      mockedPipelineManager.makeJobRequest(any,any,any,any,any)(any) returns Right("job-id")
+      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Right("job-id")
       mockedPipelineManager.createEtsPipeline(any,any)(any) returns Success(mockedPipeline)
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
@@ -148,7 +148,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val result = Await.result(toTest.processRequest(fakeRequest, mockedSettings, mockedTaskMgr), 5 seconds)
       there was one(mockedPipelineManager).findPipelineFor("mediabucket","proxybucket")(mockedEtsClient)
       there was one(mockedSnsClient).publish(any[PublishRequest])
-      there was no(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id")(mockedEtsClient)
+      there was no(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
       result must beLeft("java.lang.RuntimeException: No pipeline available to process this media")
     }
   }

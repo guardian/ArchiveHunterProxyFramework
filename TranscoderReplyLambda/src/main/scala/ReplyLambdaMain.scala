@@ -7,12 +7,59 @@ import scala.collection.JavaConverters._
 import io.circe.syntax._
 import io.circe.generic.auto._
 
-class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder {
+class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder with RequestModelEncoder {
   val snsClient = AmazonSNSAsyncClientBuilder.defaultClient()
 
   def getReplyTopic = sys.env.get("REPLY_TOPIC_ARN") match {
     case Some(str)=>str
     case None=>throw new RuntimeException("You need to specify REPLY_TOPIC_ARN")
+  }
+
+  def processMessage(msg:AwsElasticTranscodeMsg, replyTopic:String) = {
+    val maybeProxyType = msg.userMetadata.flatMap(_.get("proxy-type").map(s=>ProxyType.withName(s)))
+    if(maybeProxyType.isEmpty) println("WARNING: No proxy-type field for this job.")
+    msg.userMetadata.flatMap(_.get("archivehunter-job-id")) match {
+      case None=>
+        println("No Archivehunter job ID in the metadata! this shouldn't happen.")
+        Left("No Archivehunter job ID in the metadata! this shouldn't happen.")
+      case Some(jobId)=>
+        val maybeReplyMsg = msg.state match {
+          case TranscoderState.PROGRESSING=>
+            Some(MainAppReply.withPlainLog("running",None,jobId,"",None,maybeProxyType,None))
+          case TranscoderState.COMPLETED=>
+            val maybeOutputPath = msg.outputs.flatMap(outList=>
+              outList.headOption.map(out=>out.key)
+            )
+            maybeOutputPath match {
+              case Some(outputPath)=>
+                Some(MainAppReply.withPlainLog("success",Some(outputPath),jobId,"",msg.messageDetails, maybeProxyType, None))
+              case None=>
+                println("ERROR: Success message with no outputs? This shouldn't happen.")
+                None
+            }
+          case TranscoderState.ERROR=>
+            Some(MainAppReply.withPlainLog("error",None,jobId,"",msg.messageDetails,maybeProxyType,None))
+          case TranscoderState.WARNING=>
+            Some(MainAppReply.withPlainLog("warning",None,jobId,"",msg.messageDetails,maybeProxyType,None))
+        }
+
+        maybeReplyMsg match {
+          case Some(replyMsg) =>
+            try {
+              val prq = new PublishRequest().withTopicArn(replyTopic).withMessage(replyMsg.asJson.toString())
+              val result = snsClient.publish(prq)
+              println(s"Message sent with ${result.getMessageId}")
+              Right(result.getMessageId)
+            } catch {
+              case err: Throwable =>
+                println(s"ERROR: Couldn't send message: ${err.toString}")
+                Left(err.toString)
+            }
+          case None =>
+            println("ERROR: Nothing to relay on to main app")
+            Left("Nothing to relay to main app")
+        }
+    }
   }
 
   override def handleRequest(i: SNSEvent, context: Context): Unit = {
@@ -25,42 +72,7 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
           println(s"Could not parse incoming message: ${err.toString}")
         case Right(msg)=>
           println(s"Got message: $msg")
-          msg.userMetadata.flatMap(_.get("archivehunter-job-id")) match {
-            case Some(jobId)=>
-              val maybeReplyMsg = msg.state match {
-                case TranscoderState.PROGRESSING=>
-                  Some(MainAppReply.withPlainLog("running",None,jobId,"",None))
-                case TranscoderState.COMPLETED=>
-                  val maybeOutputPath = msg.outputs.flatMap(outList=>
-                    outList.headOption.map(out=>out.key)
-                  )
-                  maybeOutputPath match {
-                    case Some(outputPath)=>
-                      Some(MainAppReply.withPlainLog("success",Some(outputPath),jobId,"",msg.messageDetails))
-                    case None=>
-                      println("ERROR: Success message with no outputs? This shouldn't happen.")
-                      None
-                  }
-                case TranscoderState.ERROR=>
-                  Some(MainAppReply.withPlainLog("error",None,jobId,"",msg.messageDetails))
-                case TranscoderState.WARNING=>
-                  Some(MainAppReply.withPlainLog("warning",None,jobId,"",msg.messageDetails))
-              }
-
-              maybeReplyMsg match {
-                case Some(replyMsg) =>
-                  try {
-                    val prq = new PublishRequest().withTopicArn(replyTopic).withMessage(replyMsg.asJson.toString())
-                    val result = snsClient.publish(prq)
-                    println(s"Message sent with ${result.getMessageId}")
-                  } catch {
-                    case err: Throwable =>
-                      println(s"ERROR: Couldn't send message: ${err.toString}")
-                  }
-                case None =>
-
-              }
-          }
+          processMessage(msg, replyTopic)
       }
     })
   }

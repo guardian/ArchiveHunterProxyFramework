@@ -6,6 +6,7 @@
     <exclude-output />
     <content url="file://$MODULE_DIR$/../../TranscoderReplyLambda">
       <sourceFolder url="file://$MODULE_DIR$/../../TranscoderReplyLambda/src/main/scala" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/../../TranscoderReplyLambda/src/test/scala" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/../../TranscoderReplyLambda/target/scala-2.12/src_managed/main" isTestSource="false" generated="true" />
       <sourceFolder url="file://$MODULE_DIR$/../../TranscoderReplyLambda/target/scala-2.12/src_managed/test" isTestSource="true" generated="true" />
       <excludeFolder url="file://$MODULE_DIR$/../../TranscoderReplyLambda/target" />
