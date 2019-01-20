@@ -14,6 +14,7 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="sbt: com.amazonaws:aws-java-sdk-core:1.11.346:jar" level="project" />
+    <orderEntry type="module" module-name="Common" exported="" />
     <orderEntry type="library" name="sbt: software.amazon.ion:ion-java:1.0.2:jar" level="project" />
     <orderEntry type="library" name="sbt: org.typelevel:macro-compat_2.12:1.1.1:jar" level="project" />
     <orderEntry type="library" name="sbt: org.typelevel:machinist_2.12:0.6.2:jar" level="project" />

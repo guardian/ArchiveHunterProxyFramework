@@ -9,7 +9,19 @@ lazy val root = (project in file("."))
     name := "ArchiveHunterProxyLambdas"
   ).aggregate(requestLambda, ecsAlertLambda, transcoderReplyLambda)
 
+lazy val common = (project in file("common"))
+  .settings(
+    name := "Common",
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-core" % circeVersion,
+      "io.circe" %% "circe-generic" % circeVersion,
+      "io.circe" %% "circe-parser" % circeVersion,
+      "io.circe" %% "circe-java8" % circeVersion,
+    )
+  )
+
 lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
+  .dependsOn(common)
   .settings(
     libraryDependencies ++= Seq(
       "com.amazonaws" % "aws-java-sdk-lambda" % awsSdkVersion,
@@ -41,6 +53,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
   )
 
 lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
+  .dependsOn(common)
   .settings(
     libraryDependencies ++= Seq(
       "com.amazonaws" % "aws-java-sdk-lambda" % awsSdkVersion,
@@ -71,6 +84,7 @@ lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
   )
 
 lazy val `ecsAlertLambda` = (project in file("ECSAlertLambda"))
+  .dependsOn(common)
   .settings(
     libraryDependencies ++= Seq(
       "com.amazonaws" % "aws-java-sdk-lambda" % awsSdkVersion,

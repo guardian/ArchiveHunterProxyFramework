@@ -16,8 +16,6 @@ import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 
 class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder {
-
-
   def getSnsClient = AmazonSNSClientBuilder.defaultClient()
   def getEcsClient = AmazonECSClientBuilder.defaultClient()
   def getEtsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
