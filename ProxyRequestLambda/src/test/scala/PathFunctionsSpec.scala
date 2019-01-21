@@ -12,4 +12,21 @@ class PathFunctionsSpec extends Specification {
       result must beNone
     }
   }
+
+  "PathFunctions.breakdownS3Uri" should {
+    "split an S3 URI" in {
+      val result = PathFunctions.breakdownS3Uri("s3://bucket/path/to/file.ext")
+      result mustEqual ("bucket","path/to/file.ext")
+    }
+
+    "not blow up if there is no path part to the URI" in {
+      val result = PathFunctions.breakdownS3Uri("s3://bucket")
+      result mustEqual("bucket","")
+    }
+
+    "hmm" in {
+      val result = PathFunctions.breakdownS3Uri("bucket-name")
+      result mustEqual("bucket-name","")
+    }
+  }
 }

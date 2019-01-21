@@ -28,6 +28,10 @@ object PathFunctions {
     */
   def breakdownS3Uri(s3Uri:String) = {
     val u = new URI(s3Uri)
-    (u.getHost, stripped(u.getPath))
+    if(u.getHost==null){  //if there is no s3:// prefix, then we only get path back. So assume that';s the bucket.
+      (u.getPath, "")
+    } else {
+      (u.getHost, stripped(u.getPath))
+    }
   }
 }

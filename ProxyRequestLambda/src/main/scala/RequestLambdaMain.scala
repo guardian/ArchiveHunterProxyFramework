@@ -154,6 +154,24 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
           case Success(_)=>
             Right("Starting transcoding job")
         }
+
+      case RequestType.CHECK_SETUP=>
+        implicit val etsClient = getEtsClient
+        //Expecting inputMediaUri to be either the bucket name or an s3://{bucket-name} uri
+        println(s"Checking setup for ${model.inputMediaUri} -> ${model.targetLocation}")
+        val inputBucket = PathFunctions.breakdownS3Uri(model.inputMediaUri)._1
+        val outputBucket = model.targetLocation
+        etsPipelineManager.findPipelineFor(inputBucket,outputBucket) match {
+          case Success(pipelineSeq)=>
+            val logString = s"Found pipelines for ${model.inputMediaUri} -> ${model.targetLocation}: \n" + pipelineSeq.foldLeft("")((acc,entry)=>acc + s"${entry.getName}: ${entry.getId} (${entry.getStatus})")
+            val msgReply = MainAppReply.withPlainLog("ok",pipelineSeq.headOption.map(_.getName),model.jobId,model.inputMediaUri,Some(logString),None,None)
+            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+            Right(s"Found ${pipelineSeq.length} pipelines")
+          case Failure(err)=>
+            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err.toString),None,None)
+            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+            Left(err.toString)
+        }
       case _=>
         val err=s"Don't understand requested action ${model.requestType}"
         val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err),None,None)
