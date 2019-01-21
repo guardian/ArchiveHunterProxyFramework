@@ -102,7 +102,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       mockedSettings.videoPresetId returns "video-preset-id"
       mockedSettings.audioPresetId returns "audio-preset-id"
 
-      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","s3://proxybucket/fake-proxy-uri","fake-job-id",None,Some(ProxyType.VIDEO))
+      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,Some(ProxyType.VIDEO))
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
 
@@ -114,7 +114,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val result = Await.result(toTest.processRequest(fakeRequest, mockedSettings, mockedTaskMgr), 5 seconds)
       there was one(mockedPipelineManager).findPipelineFor("mediabucket","proxybucket")(mockedEtsClient)
       there was no(mockedPipelineManager).createEtsPipeline(any,any)(any)
-      there was one(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
+      there was one(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-media-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
       result must beRight
     }
 
@@ -135,7 +135,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       mockedSettings.videoPresetId returns "video-preset-id"
       mockedSettings.audioPresetId returns "audio-preset-id"
 
-      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","s3://proxybucket/fake-proxy-uri","fake-job-id",None,Some(ProxyType.VIDEO))
+      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,Some(ProxyType.VIDEO))
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
 
