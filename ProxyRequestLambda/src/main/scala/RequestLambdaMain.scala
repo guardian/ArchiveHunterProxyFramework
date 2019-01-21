@@ -111,10 +111,15 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         }
       case RequestType.PROXY=>
         implicit val etsClient = getEtsClient
+        //FIXME: targetLocation is actually the BUCKET, not the URI, of the target.
         val input = PathFunctions.breakdownS3Uri(model.inputMediaUri)
-        val output = PathFunctions.breakdownS3Uri(model.targetLocation)
+        val outputBucket = model.targetLocation
+        val outputPrefix = PathFunctions.removeExtension(input._2) match {
+          case Some(pfx)=>pfx
+          case None=>input._2 //if there was no extension in the first place
+        }
 
-        println(s"Attempting to start transcode from $input to $output")
+        println(s"Attempting to start transcode from $input to something with prefix s3://$outputBucket/$outputPrefix ...")
         val presetId = model.proxyType match {
           case Some(ProxyType.VIDEO)=>settings.videoPresetId
           case Some(ProxyType.AUDIO)=>settings.audioPresetId
@@ -132,13 +137,13 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             throw new RuntimeException(err)
         }
 
-        etsPipelineManager.findPipelineFor(input._1,output._1).flatMap(pipelineList=>{
+        etsPipelineManager.findPipelineFor(input._1,outputBucket).flatMap(pipelineList=>{
           if(pipelineList.isEmpty){
-            println(s"No pipelines found for ${input._1} -> ${output._1}.")
+            println(s"No pipelines found for ${input._1} -> $outputBucket.")
             Failure(new RuntimeException("No pipeline available to process this media"))
           } else {
             println(s"Starting job on pipeline ${pipelineList.head}")
-            Success(etsPipelineManager.makeJobRequest(input._2,output._2, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get))
+            Success(etsPipelineManager.makeJobRequest(input._2,outputPrefix, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get))
           }
         }) match {
           case Failure(err)=>

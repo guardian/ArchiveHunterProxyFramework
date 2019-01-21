@@ -105,7 +105,7 @@ class ETSPipelineManager {
       Right(result.getJob.getId)
     } catch {
       case err:Throwable=>
-        println(s"ERROR: Could not start transcode job: ${err}")
+        println(s"ERROR: Could not start transcode job: $err")
         Left(err.toString)
     }
   }
