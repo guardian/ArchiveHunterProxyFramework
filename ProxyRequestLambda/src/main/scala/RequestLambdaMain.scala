@@ -15,7 +15,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 
-class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder {
+class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder with JobReportStatusEncoder {
   def getSnsClient = AmazonSNSClientBuilder.defaultClient()
   def getEcsClient = AmazonECSClientBuilder.defaultClient()
   def getEtsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
@@ -57,12 +57,12 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       .flatMap(pipeline=>etsPipelineManager.waitForCompletion(pipeline.getId)) match {
       case Success(pipelineId)=>
         println(s"Successfully created pipeline: $pipelineId")
-        val replyMsg = MainAppReply.withPlainLog("success",Some(pipelineId),model.jobId,"",None,None,None)
+        val replyMsg = MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(pipelineId),model.jobId,"",None,None,None)
         snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
         Right("Created pipeline")
       case Failure(err)=>
         println(s"Could not create pipeline: $err")
-        val replyMsg = MainAppReply.withPlainLog("error",None,model.jobId,"",Some(err.toString),None,None)
+        val replyMsg = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,"",Some(err.toString),None,None)
         snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
         Left("Could not create pipeline")
     }
@@ -126,13 +126,13 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
           case Some(other)=>
             val err=s"Don't have a preset available for proxy type ${other.toString}"
             println(err)
-            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err),Some(ProxyType.UNKNOWN),None)
+            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(err),Some(ProxyType.UNKNOWN),None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
             throw new RuntimeException(s"No preset available for ${other.toString}")
           case None=>
             val err=s"ERROR: No ProxyType parameter in request"
             println(err)
-            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err),None,None)
+            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(err),None,None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
             throw new RuntimeException(err)
         }
@@ -148,7 +148,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         }) match {
           case Failure(err)=>
             println(s"Unable to start transcoding job: $err")
-            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
+            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
             Left(err.toString)
           case Success(_)=>
@@ -164,17 +164,17 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         etsPipelineManager.findPipelineFor(inputBucket,outputBucket) match {
           case Success(pipelineSeq)=>
             val logString = s"Found pipelines for ${model.inputMediaUri} -> ${model.targetLocation}: \n" + pipelineSeq.foldLeft("")((acc,entry)=>acc + s"${entry.getName}: ${entry.getId} (${entry.getStatus})")
-            val msgReply = MainAppReply.withPlainLog("ok",pipelineSeq.headOption.map(_.getName),model.jobId,model.inputMediaUri,Some(logString),None,None)
+            val msgReply = MainAppReply.withPlainLog(JobReportStatus.SUCCESS,pipelineSeq.headOption.map(_.getName),model.jobId,model.inputMediaUri,Some(logString),None,None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
             Right(s"Found ${pipelineSeq.length} pipelines")
           case Failure(err)=>
-            val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err.toString),None,None)
+            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(err.toString),None,None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
             Left(err.toString)
         }
       case _=>
         val err=s"Don't understand requested action ${model.requestType}"
-        val msgReply = MainAppReply.withPlainLog("error",None,model.jobId,model.inputMediaUri,Some(err),None,None)
+        val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(err),None,None)
         snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
         Left(err)
     }

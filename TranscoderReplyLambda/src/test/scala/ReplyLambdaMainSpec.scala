@@ -9,7 +9,7 @@ import io.circe.generic.auto._
 
 import scala.collection.JavaConverters._
 
-class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEncoder with TranscoderMessageDecoder{
+class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEncoder with TranscoderMessageDecoder with JobReportStatusEncoder {
   "ReplyLambdaMain.processMessage" should {
     "send a 'running' message to SNS for a PROGRESSING state" in {
       val mockedSnsClient = mock[AmazonSNSAsync]
@@ -26,7 +26,7 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
       }
 
       val result = main.processMessage(fakeMsg,"reply-topic")
-      val expectedOutputMsg = MainAppReply("running",None,"jobuuid","",None,Some(ProxyType.VIDEO),None)
+      val expectedOutputMsg = MainAppReply(JobReportStatus.RUNNING,None,"jobuuid","",None,Some(ProxyType.VIDEO),None)
       val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
       there was one(mockedSnsClient).publish(expectedPublishRequest)
       result must beRight("message-id")
@@ -47,7 +47,7 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
       }
 
       val result = main.processMessage(fakeMsg,"reply-topic")
-      val expectedOutputMsg = MainAppReply("error",None,"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
+      val expectedOutputMsg = MainAppReply(JobReportStatus.FAILURE,None,"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
       val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
       there was one(mockedSnsClient).publish(expectedPublishRequest)
       result must beRight("message-id")
@@ -68,7 +68,7 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
       }
 
       val result = main.processMessage(fakeMsg,"reply-topic")
-      val expectedOutputMsg = MainAppReply("warning",None,"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
+      val expectedOutputMsg = MainAppReply(JobReportStatus.WARNING,None,"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
       val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
       there was one(mockedSnsClient).publish(expectedPublishRequest)
       result must beRight("message-id")
@@ -91,7 +91,7 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
 
       val result = main.processMessage(fakeMsg,"reply-topic")
 
-      val expectedOutputMsg = MainAppReply("success",Some("outfile.mp4"),"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
+      val expectedOutputMsg = MainAppReply(JobReportStatus.SUCCESS,Some("outfile.mp4"),"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
       val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
       there was one(mockedSnsClient).publish(expectedPublishRequest)
       result must beRight("message-id")

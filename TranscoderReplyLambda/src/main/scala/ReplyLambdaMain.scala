@@ -7,7 +7,7 @@ import scala.collection.JavaConverters._
 import io.circe.syntax._
 import io.circe.generic.auto._
 
-class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder with RequestModelEncoder {
+class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder with RequestModelEncoder with JobReportStatusEncoder {
   val snsClient = AmazonSNSAsyncClientBuilder.defaultClient()
 
   def getReplyTopic = sys.env.get("REPLY_TOPIC_ARN") match {
@@ -25,22 +25,22 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
       case Some(jobId)=>
         val maybeReplyMsg = msg.state match {
           case TranscoderState.PROGRESSING=>
-            Some(MainAppReply.withPlainLog("running",None,jobId,"",None,maybeProxyType,None))
+            Some(MainAppReply.withPlainLog(JobReportStatus.RUNNING,None,jobId,"",None,maybeProxyType,None))
           case TranscoderState.COMPLETED=>
             val maybeOutputPath = msg.outputs.flatMap(outList=>
               outList.headOption.map(out=>out.key)
             )
             maybeOutputPath match {
               case Some(outputPath)=>
-                Some(MainAppReply.withPlainLog("success",Some(outputPath),jobId,"",msg.messageDetails, maybeProxyType, None))
+                Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(outputPath),jobId,"",msg.messageDetails, maybeProxyType, None))
               case None=>
                 println("ERROR: Success message with no outputs? This shouldn't happen.")
                 None
             }
           case TranscoderState.ERROR=>
-            Some(MainAppReply.withPlainLog("error",None,jobId,"",msg.messageDetails,maybeProxyType,None))
+            Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,jobId,"",msg.messageDetails,maybeProxyType,None))
           case TranscoderState.WARNING=>
-            Some(MainAppReply.withPlainLog("warning",None,jobId,"",msg.messageDetails,maybeProxyType,None))
+            Some(MainAppReply.withPlainLog(JobReportStatus.WARNING,None,jobId,"",msg.messageDetails,maybeProxyType,None))
         }
 
         maybeReplyMsg match {
