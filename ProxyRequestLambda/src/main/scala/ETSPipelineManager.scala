@@ -51,6 +51,25 @@ class ETSPipelineManager {
     result.getPipeline.getStatus
   }
 
+  def checkPipelineMessagingConfig(pipelineId:String, expectedTopicArn:String)(implicit etsClient:AmazonElasticTranscoder) = Try {
+    val rq = new ReadPipelineRequest().withId(pipelineId)
+
+    val result = etsClient.readPipeline(rq)
+    val notifications = result.getPipeline.getNotifications
+
+    if(notifications.getCompleted!=expectedTopicArn){
+      Left(s"completed message topic is wrong, expected $expectedTopicArn got ${notifications.getCompleted}")
+    } else if(notifications.getError!=expectedTopicArn){
+      Left(s"error message topic is wrong, expected $expectedTopicArn got ${notifications.getCompleted}")
+    } else if(notifications.getProgressing!=expectedTopicArn){
+      Left(s"progressing message topic is wrong, expected $expectedTopicArn got ${notifications.getCompleted}")
+    } else if(notifications.getWarning!=expectedTopicArn){
+      Left(s"warning message topic is wrong, expected $expectedTopicArn got ${notifications.getCompleted}")
+    } else {
+      Right(s"all message topics as expected")
+    }
+  }
+
   /**
     * wait until the pipeline is in an Active state
     * @param pipelineId pipeline ID to wait on

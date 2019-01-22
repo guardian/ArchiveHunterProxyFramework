@@ -163,10 +163,30 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         val outputBucket = model.targetLocation
         etsPipelineManager.findPipelineFor(inputBucket,outputBucket) match {
           case Success(pipelineSeq)=>
-            val logString = s"Found pipelines for ${model.inputMediaUri} -> ${model.targetLocation}: \n" + pipelineSeq.foldLeft("")((acc,entry)=>acc + s"${entry.getName}: ${entry.getId} (${entry.getStatus})")
-            val msgReply = MainAppReply.withPlainLog(JobReportStatus.SUCCESS,pipelineSeq.headOption.map(_.getName),model.jobId,model.inputMediaUri,Some(logString),None,None)
-            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
-            Right(s"Found ${pipelineSeq.length} pipelines")
+            if(pipelineSeq.isEmpty){
+              val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,pipelineSeq.headOption.map(_.getName),model.jobId,model.inputMediaUri,Some("No pipelines found for this target"),None,None)
+              snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+              Left("Found no pipelines")
+            } else {
+              val logString = s"Found pipelines for ${model.inputMediaUri} -> ${model.targetLocation}: \n" + pipelineSeq.foldLeft("")((acc, entry) => acc + s"${entry.getName}: ${entry.getId} (${entry.getStatus})")
+
+              etsPipelineManager.checkPipelineMessagingConfig(pipelineSeq.head.getId,settings.etsMessageTopic) match {
+                case Failure(err)=>
+                  val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE, pipelineSeq.headOption.map(_.getName), model.jobId, model.inputMediaUri, Some(err.toString), None, None)
+                  snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+                case Success(Left(problem))=>
+                  val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE, pipelineSeq.headOption.map(_.getName), model.jobId, model.inputMediaUri, Some(problem), None, None)
+                  snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+                case Success(Right(value))=>
+                  val msgReply = if(pipelineSeq.length>1) {
+                    MainAppReply.withPlainLog(JobReportStatus.WARNING, pipelineSeq.headOption.map(_.getName), model.jobId, model.inputMediaUri, Some(s"Expected one pipeline, found ${pipelineSeq.length}"), None, None)
+                  } else {
+                    MainAppReply.withPlainLog(JobReportStatus.SUCCESS, pipelineSeq.headOption.map(_.getName), model.jobId, model.inputMediaUri, Some(logString), None, None)
+                  }
+                  snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
+              }
+              Right(s"Found ${pipelineSeq.length} pipelines")
+            }
           case Failure(err)=>
             val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(err.toString),None,None)
             snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString()).withTopicArn(settings.replyTopic))
