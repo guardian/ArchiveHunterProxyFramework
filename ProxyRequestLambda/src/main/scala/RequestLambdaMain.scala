@@ -43,15 +43,14 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     randomStringFromCharList(length, chars)
   }
 
-  def doSetupPipeline(model:RequestModel, settings:Settings)(implicit etsClient:AmazonElasticTranscoder) = {
-    val rq = model.createPipelineRequest.get
+  def doSetupPipeline(model:RequestModel, fromBucket:String, toBucket:String, settings:Settings)(implicit etsClient:AmazonElasticTranscoder) = {
     val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
     println(s"Attempting to create a pipeline request with name $pipelineName")
     val createRq = new CreatePipelineRequest()
-      .withInputBucket(rq.fromBucket)
+      .withInputBucket(fromBucket)
       .withName(pipelineName)
       .withNotifications(new Notifications().withCompleted(settings.etsMessageTopic).withError(settings.etsMessageTopic).withWarning(settings.etsMessageTopic).withProgressing(settings.etsMessageTopic))
-      .withOutputBucket(rq.toBucket)
+      .withOutputBucket(toBucket)
       .withRole(settings.etsRoleArn)
     etsPipelineManager.createEtsPipeline(createRq,settings.etsRoleArn)
       .flatMap(pipeline=>etsPipelineManager.waitForCompletion(pipeline.getId)) match {
@@ -78,7 +77,41 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       case RequestType.SETUP_PIPELINE=>
         println("Received setup pipeline request")
         implicit val etsClient = getEtsClient
-        doSetupPipeline(model, settings)
+        model.createPipelineRequest match {
+          case None=>
+            val replyMsg = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,"",Some("No pipeline request in message body"),None,None)
+            snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
+            Left("No pipeline request in message body")
+          case Some(pipelineRequest)=>
+            etsPipelineManager.findPipelineFor(pipelineRequest.fromBucket, pipelineRequest.toBucket) match {
+              case Failure(err)=>
+                println(s"Could not look up existing pipelines: ${err.toString}")
+                val replyMsg = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,"",Some(err.toString),None,None)
+                snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
+                Left(err.toString)
+              case Success(pipelines)=>
+                if(pipelines.isEmpty){
+                  println(s"found no existing pipelines for ${pipelineRequest.fromBucket}->${pipelineRequest.toBucket}, creating a new one")
+                  doSetupPipeline(model, pipelineRequest.fromBucket, pipelineRequest.toBucket, settings)
+                } else {
+                  println(s"Found existing pipelines for ${pipelineRequest.fromBucket}->${pipelineRequest.toBucket}:")
+                  pipelines.foreach(pl=>println(s"\t${pl.getName}: ${pl.getId} (${pl.getStatus}"))
+                  if(model.hasForce){
+                    println(s"Force option present, deleting existing ones and re-creating")
+                    pipelines.foreach(pl=> {
+                      val deleteRq = new DeletePipelineRequest().withId(pl.getId)
+                      etsClient.deletePipeline(deleteRq)
+                    })
+                    doSetupPipeline(model, pipelineRequest.fromBucket, pipelineRequest.toBucket, settings)
+                  } else {
+                    println(s"Not deleting pipelines so I can't set up a new one.")
+                    val replyMsg = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,"",Some(s"${pipelines.length} pipelines existing already, can't create. Retry with FORCE option to delete these."),None,None)
+                    snsClient.publish(new PublishRequest().withMessage(replyMsg.asJson.toString()).withTopicArn(settings.replyTopic))
+                    Left("Could not create pipeline")
+                  }
+                }
+            }
+        }
 
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(

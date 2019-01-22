@@ -25,7 +25,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedEcsClient = mock[AmazonECS]
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None)
+      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
@@ -42,7 +42,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedEcsClient = mock[AmazonECS]
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None)
+      val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
@@ -59,7 +59,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedEcsClient = mock[AmazonECS]
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","","fake-job-id",None,None)
+      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","","fake-job-id",None,None,None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
@@ -76,7 +76,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedEcsClient = mock[AmazonECS]
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
-      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None)
+      val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
       mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
@@ -102,7 +102,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       mockedSettings.videoPresetId returns "video-preset-id"
       mockedSettings.audioPresetId returns "audio-preset-id"
 
-      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,Some(ProxyType.VIDEO))
+      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,None,Some(ProxyType.VIDEO))
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
 
@@ -135,7 +135,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       mockedSettings.videoPresetId returns "video-preset-id"
       mockedSettings.audioPresetId returns "audio-preset-id"
 
-      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,Some(ProxyType.VIDEO))
+      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,None,Some(ProxyType.VIDEO))
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
 
@@ -156,7 +156,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
   "RequestLambdaMain.handleRequest" should {
     "convert SNS messages into our message format and not choke on errors" in {
-      val actualRequest = RequestModel(RequestType.ANALYSE,"input-uri","target-location","job-id",None,None)
+      val actualRequest = RequestModel(RequestType.ANALYSE,"input-uri","target-location","job-id",None,None,None)
       val recods = List(
         new SNSRecord().withSns(new SNSEvent.SNS().withMessage(actualRequest.asJson.toString)),
         new SNSRecord().withSns(new SNSEvent.SNS().withMessage("{\"field\":\"invalidmessage\"}")),
