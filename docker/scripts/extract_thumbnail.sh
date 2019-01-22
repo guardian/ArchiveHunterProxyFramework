@@ -48,6 +48,12 @@ elif [[ "$MIMETYPE" =~ ^image.* ]]; then
     mv /tmp/mediafile /tmp/imagefile
     extract_image_thumbnail.sh "$1" "$2" "$3" "$4"
     exit $?
+elif [[ "$MIMETYPE" == "application/octet-stream" ]]; then
+    #if we don't know, assume video
+    echo Assuming video for application/octet-stream
+    mv /tmp/mediafile /tmp/videofile
+    extract_video_thumbnail.sh "$1" "$2" "$3" "$4"
+    exit $?
 else
     echo ${MIMETYPE} files are not supported yet
     echo Script failed. Informing server...
