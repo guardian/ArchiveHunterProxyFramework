@@ -1,3 +1,5 @@
+import com.amazonaws.services.elastictranscoder.AmazonElasticTranscoderClientBuilder
+import com.amazonaws.services.elastictranscoder.model.Pipeline
 import com.amazonaws.services.lambda.runtime.{Context, RequestHandler}
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.sns.AmazonSNSAsyncClientBuilder
@@ -9,11 +11,21 @@ import io.circe.generic.auto._
 
 class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder with RequestModelEncoder with JobReportStatusEncoder {
   val snsClient = AmazonSNSAsyncClientBuilder.defaultClient()
+  val etsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
 
   def getReplyTopic = sys.env.get("REPLY_TOPIC_ARN") match {
     case Some(str)=>str
     case None=>throw new RuntimeException("You need to specify REPLY_TOPIC_ARN")
   }
+
+  def getPipelineConfig(pipelineId:String) = {
+    val result = etsClient.listPipelines()
+    result.getPipelines.asScala.find(_.getId==pipelineId)
+  }
+
+  def getOutputUri(plConfig:Pipeline,outputPath:String) = s"s3://${plConfig.getOutputBucket}/$outputPath"
+
+  def getInputUri(plConfig:Pipeline,inputPath:String) = s"s3://${plConfig.getInputBucket}/$inputPath"
 
   def processMessage(msg:AwsElasticTranscodeMsg, replyTopic:String) = {
     val maybeProxyType = msg.userMetadata.flatMap(_.get("proxy-type").map(s=>ProxyType.withName(s)))
@@ -32,7 +44,14 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
             )
             maybeOutputPath match {
               case Some(outputPath)=>
-                Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(outputPath),jobId,"",msg.messageDetails, maybeProxyType, None))
+                getPipelineConfig(msg.pipelineId) match {
+                  case None=>
+                    println(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?")
+                    Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,jobId,"",Some(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?"), maybeProxyType, None))
+                  case Some(plConfig)=>
+                    val outputUri = getOutputUri(plConfig, outputPath)
+                    Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(outputUri),jobId,"",msg.messageDetails, maybeProxyType, None))
+                }
               case None=>
                 println("ERROR: Success message with no outputs? This shouldn't happen.")
                 None

@@ -1,3 +1,4 @@
+import com.amazonaws.services.elastictranscoder.model.Pipeline
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.sns.AmazonSNSAsync
@@ -87,11 +88,13 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
       val main = new ReplyLambdaMain {
         override val snsClient: AmazonSNSAsync = mockedSnsClient
         override def getReplyTopic: String = "fake-reply-topic"
+
+        override def getPipelineConfig(pipelineId: String): Option[Pipeline] = Some(new Pipeline().withOutputBucket("proxybucket"))
       }
 
       val result = main.processMessage(fakeMsg,"reply-topic")
 
-      val expectedOutputMsg = MainAppReply(JobReportStatus.SUCCESS,Some("outfile.mp4"),"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
+      val expectedOutputMsg = MainAppReply(JobReportStatus.SUCCESS,Some("s3://proxybucket/outfile.mp4"),"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
       val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
       there was one(mockedSnsClient).publish(expectedPublishRequest)
       result must beRight("message-id")

@@ -17,7 +17,7 @@ if [ "$OUTPUT_QUALITY" == "" ]; then
     OUTPUT_QUALITY=2
 fi
 
-aws sns publish --topic-arn $3 --message '{"status":"running","jobId":"'"$4"'","input":"'"$1"'"}'
+aws sns publish --topic-arn $3 --message '{"status":"RUNNING","jobId":"'"$4"'","input":"'"$1"'"}'
 echo Extracting thumbnail...
 echo ffmpeg -i /tmp/videofile -ss ${FRAME_LOCATION} -vframes 1 -q:v ${OUTPUT_QUALITY} -y /tmp/output.jpg
 

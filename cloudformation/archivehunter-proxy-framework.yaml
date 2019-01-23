@@ -422,6 +422,15 @@ Resources:
             - sns:Publish
             Resource:
             - !Ref ReplyTopic
+      - PolicyName: ETSPipelines
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - elastictranscoder:ListPipelines
+            Resource:
+            - "*"
 
   TranscoderLambdaInvokePermission:
     Type: AWS::Lambda::Permission
