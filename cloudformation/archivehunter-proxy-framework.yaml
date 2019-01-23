@@ -16,10 +16,9 @@ Parameters:
     - DEV
     - PROD
     Description: Deployment stage
-  MainAppReplyQueueArn:
+  MainAppRole:
     Type: String
-    Description: ARN of the SQS queue that the main app is listening on for reply messages
-    AllowedPattern: ^arn:aws:sqs:[\w\-]+:\d{12}:[^:]+$
+    Description: Name (NOT arn) of the role that is being used by instances of the main app. This is to allow them to assume the management role defined here.
   ProxyingTaskImageRef:
     Description: Docker path to the image used for proxying.
     Type: String
@@ -55,10 +54,6 @@ Resources:
 
   ReplyTopic:
     Type: AWS::SNS::Topic
-    Properties:
-      Subscription:
-      - Endpoint: !Ref MainAppReplyQueueArn
-        Protocol: sqs
 
   RequestLambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -158,7 +153,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+              AWS:
+              - !Sub arn:aws:iam::${AWS::AccountId}:root
+              - !Sub arn:aws:sts::${AWS::AccountId}:role/${MainAppRole}
             Action: sts:AssumeRole
       Path: /
       Policies:

@@ -2,6 +2,7 @@
 
 echo extract_audio_thumbnail starting. Arguments: $1 $2 $3 $4
 
+aws sns publish --topic-arn $3 --message '{"status":"RUNNING","jobId":"'"$4"'","input":"'"$1"'"}'
 
 echo Converting audio...
 ffmpeg -y -i /tmp/audiofile -vn -acodec pcm_s16le -r 8k -ac 1 -f wav /tmp/temp1.wav > /tmp/logfile 2>&1
