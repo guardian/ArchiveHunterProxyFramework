@@ -5,7 +5,7 @@ import os.path
 import argparse
 from functools import reduce
 
-refs_to_find = ["TranscoderReplyLambda", "RequestLambda",]
+refs_to_find = ["RequestLambda","TranscoderReplyLambda"]
 jars_for_ref = ["ProxyRequestLambda/target/scala-2.12/proxyRequestLambda.jar",
                 "TranscoderReplyLambda/target/scala-2.12/transcoderReplyLambda.jar"]
 upload_path_selector = ["archivehunter-proxyrequest-lambda","archivehunter-transcoderreply-lambda"]

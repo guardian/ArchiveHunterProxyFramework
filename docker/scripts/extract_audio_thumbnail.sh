@@ -36,16 +36,16 @@ if [ "$FFMPEG_EXIT" == "0" ] && [ "$SOX_EXIT" == "0" ] && [ "$GNUPLOT_EXIT" == "
 
     if [ "$?" == "0" ]; then
         echo Informing server...
-        aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"SUCCESS","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
         ENCODED_LOG=$(echo $UPLOAD_LOG | base64)
 
-        aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
     ENCODED_LOG=$(base64 /tmp/logfile)
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi
