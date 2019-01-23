@@ -132,7 +132,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         taskMgr.runTask(
           command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", model.inputMediaUri, settings.replyTopic, model.jobId),
           environment = Map(),
-          name = s"extract_thumbnail_${model.jobId.toString}",
+          name = s"analyze_media_${model.jobId.toString}",
           cpu = None
         ) match {
           case Success(task)=>

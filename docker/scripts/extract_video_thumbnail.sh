@@ -8,15 +8,6 @@ if [ "$4" == "" ]; then
     exit 1
 fi
 
-MIMETYPE=$(file -b --mime-type /tmp/videofile)
-echo $MIMETYPE | grep video
-
-if [ "$?" != "0" ]; then
-    echo This is not a video file.
-    ENCODED_LOG=$(echo Provided file was not a video file |  base64 -w0)
-    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
-    exit 1
-fi
 
 if [ "$FRAME_LOCATION" == "" ]; then
     FRAME_LOCATION=00:00:08
