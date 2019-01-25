@@ -8,15 +8,6 @@ if [ "$4" == "" ]; then
     exit 1
 fi
 
-MIMETYPE=$(file -b --mime-type /tmp/videofile)
-echo $MIMETYPE | grep video
-
-if [ "$?" != "0" ]; then
-    echo This is not a video file.
-    ENCODED_LOG=$(echo Provided file was not a video file |  base64 -w0)
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
-    exit 1
-fi
 
 if [ "$FRAME_LOCATION" == "" ]; then
     FRAME_LOCATION=00:00:08
@@ -26,7 +17,7 @@ if [ "$OUTPUT_QUALITY" == "" ]; then
     OUTPUT_QUALITY=2
 fi
 
-aws sns publish --topic-arn $3 --message '{"status":"running","jobId":"'"$4"'","input":"'"$1"'"}'
+aws sns publish --topic-arn $3 --message '{"status":"RUNNING","jobId":"'"$4"'","input":"'"$1"'"}'
 echo Extracting thumbnail...
 echo ffmpeg -i /tmp/videofile -ss ${FRAME_LOCATION} -vframes 1 -q:v ${OUTPUT_QUALITY} -y /tmp/output.jpg
 
@@ -52,16 +43,16 @@ if [ "$FFMPEG_EXIT" == "0" ] && [ -f /tmp/output.jpg ]; then
 
     if [ "${UPLOAD_EXIT}" == "0" ]; then
         echo Informing server...
-        aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"SUCCESS","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
         ENCODED_LOG=$(echo $UPLOAD_LOG | base64 -w0)
 
-        aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
     ENCODED_LOG=$(echo $OUTLOG |  base64 -w0)
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi

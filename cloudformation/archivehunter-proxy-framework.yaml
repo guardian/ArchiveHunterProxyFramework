@@ -16,10 +16,9 @@ Parameters:
     - DEV
     - PROD
     Description: Deployment stage
-  MainAppReplyQueueArn:
+  MainAppRole:
     Type: String
-    Description: ARN of the SQS queue that the main app is listening on for reply messages
-    AllowedPattern: ^arn:aws:sqs:[\w\-]+:\d{12}:[^:]+$
+    Description: Name (NOT arn) of the role that is being used by instances of the main app. This is to allow them to assume the management role defined here.
   ProxyingTaskImageRef:
     Description: Docker path to the image used for proxying.
     Type: String
@@ -27,6 +26,14 @@ Parameters:
   DeploySubnets:
     Description: Subnets to deploy into.
     Type: List<AWS::EC2::Subnet::Id>
+  VideoTranscodingPresetId:
+    Description: ETS Preset ID to use when transcoding video proxies
+    Type: String
+    Default: 1387374611767-d52fja
+  AudioTranscodingPresetId:
+    Description: ETS Preset ID to use when transcoding video proxies
+    Type: String
+    Default: 1351620000001-300040
 
 Mappings:
   RegionalBuckets:
@@ -47,10 +54,6 @@ Resources:
 
   ReplyTopic:
     Type: AWS::SNS::Topic
-    Properties:
-      Subscription:
-      - Endpoint: !Ref MainAppReplyQueueArn
-        Protocol: sqs
 
   RequestLambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -113,6 +116,33 @@ Resources:
             - iam:PassRole
             Resource:
             - !GetAtt ProxyGeneratorRole.Arn
+            - !GetAtt TranscodingRole.Arn
+      - PolicyName: SNSAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - sns:Publish
+            Resource:
+            - !Ref ReplyTopic
+      - PolicyName: TranscoderAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - "elastictranscoder:*"
+            Resource:
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:pipeline/*
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:job/*
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:preset/${VideoTranscodingPresetId}
+            - !Sub arn:aws:elastictranscoder:${AWS::Region}:${AWS::AccountId}:preset/${AudioTranscodingPresetId}
+          - Effect: Allow
+            Action:
+              - elastictranscoder:CreatePipeline
+              - elastictranscoder:ListPipelines
+            Resource: "*"
 
   # This role is assumed by the main app via STS to submit jobs and to connect to the reply topic
   ManagementRole:
@@ -123,7 +153,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+              AWS:
+              - !Sub arn:aws:iam::${AWS::AccountId}:root
+              - !Sub arn:aws:sts::${AWS::AccountId}:role/${MainAppRole}
             Action: sts:AssumeRole
       Path: /
       Policies:
@@ -154,6 +186,10 @@ Resources:
           TASK_CONTAINER: !Sub ${Stack}-${App}Proxy-${Stage}
           SUBNET_LIST: !Join [",",!Ref DeploySubnets]
           REPLY_TOPIC_ARN: !Ref ReplyTopic
+          ETS_ROLE_ARN: !GetAtt TranscodingRole.Arn
+          ETS_MESSAGE_TOPIC: !Ref TranscoderReplyTopic
+          VIDEO_PRESET_ID: !Ref VideoTranscodingPresetId
+          AUDIO_PRESET_ID: !Ref AudioTranscodingPresetId
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
@@ -263,6 +299,143 @@ Resources:
       RequiresCompatibilities:
       - FARGATE
       TaskRoleArn: !GetAtt ProxyGeneratorRole.Arn
+
+  #see https://docs.aws.amazon.com/elastictranscoder/latest/developerguide/access-control.html
+  TranscodingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: elastictranscoder.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: BucketRead
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '1'
+            Effect: Allow
+            Action:
+            - s3:Get*
+            - s3:ListBucket
+            - s3:Put*
+            - s3:*MultipartUpload*
+            Resource: "*"
+      - PolicyName: SNSPublish
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '2'
+            Effect: Allow
+            Action: sns:Publish
+            Resource: "*"
+      - PolicyName: BlockBucketOps
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Sid: '3'
+            Effect: Deny
+            Action:
+            - sns:*Permission*
+            - sns:*Delete*
+            - sns:*Remove*
+            - s3:*Policy*
+            - s3:*Delete*
+            Resource: "*"
+
+  TranscoderReplyTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: !GetAtt TranscoderReplyLambda.Arn
+        Protocol: lambda
+
+  TranscoderReplyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !FindInMap [RegionalBuckets, !Ref "AWS::Region", Name]
+        S3Key: !Sub ${Stack}/${Stage}/archivehunter-transcoderreply-lambda/transcoderReplyLambda.jar
+      Environment:
+        Variables:
+          REPLY_TOPIC_ARN: !Ref ReplyTopic
+          ETS_ROLE_ARN: !GetAtt TranscodingRole.Arn
+      Handler: ReplyLambdaMain
+      FunctionName: !Sub archivehunter-transcoderreply-${Stage}
+      MemorySize: 768
+      Role: !GetAtt TranscoderReplyLambdaRole.Arn
+      Runtime: java8
+      Timeout: 60
+      Tags:
+      - Key: App
+        Value: !Ref App
+      - Key: Stack
+        Value: !Ref Stack
+      - Key: Stage
+        Value: !Ref Stage
+      Description: Process reply messages from Elastic Transcoder
+
+  TranscoderReplyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: AccessBucket
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeInstances
+            - ec2:DescribeInstanceStatus
+            - ec2:DescribeTags
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+      - PolicyName: SNSAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - sns:Publish
+            Resource:
+            - !Ref ReplyTopic
+      - PolicyName: ETSPipelines
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+            - elastictranscoder:ListPipelines
+            Resource:
+            - "*"
+
+  TranscoderLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref TranscoderReplyTopic
+      FunctionName: !GetAtt TranscoderReplyLambda.Arn
 
 Outputs:
   InputTopic:

@@ -2,6 +2,7 @@
 
 echo extract_audio_thumbnail starting. Arguments: $1 $2 $3 $4
 
+aws sns publish --topic-arn $3 --message '{"status":"RUNNING","jobId":"'"$4"'","input":"'"$1"'"}'
 
 echo Converting audio...
 ffmpeg -y -i /tmp/audiofile -vn -acodec pcm_s16le -r 8k -ac 1 -f wav /tmp/temp1.wav > /tmp/logfile 2>&1
@@ -36,16 +37,16 @@ if [ "$FFMPEG_EXIT" == "0" ] && [ "$SOX_EXIT" == "0" ] && [ "$GNUPLOT_EXIT" == "
 
     if [ "$?" == "0" ]; then
         echo Informing server...
-        aws sns publish --topic-arn $3 --message '{"status":"success","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"SUCCESS","output":"'"$OUTPATH"'","jobId":"'"$4"'","input":"'"$1"'"}'
     else
         echo Informing server of failure...
         ENCODED_LOG=$(echo $UPLOAD_LOG | base64)
 
-        aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+        aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
     fi
 else
     echo Output failed. Informing server...
     echo Server callback URL is $3
     ENCODED_LOG=$(base64 /tmp/logfile)
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
+    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"'$ENCODED_LOG'","jobId":"'"$4"'","input":"'"$1"'"}'
 fi

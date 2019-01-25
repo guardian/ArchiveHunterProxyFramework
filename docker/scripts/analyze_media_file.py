@@ -12,6 +12,7 @@ import subprocess
 from urlparse import urlparse
 import base64
 
+
 def s3_download(uri, local_path):
     """
     download the given S3 URI to the file pointed to by local_path
@@ -86,7 +87,7 @@ def send_sns(content, attempt=0):
 
 def report_success(meta_dict):
     content = json.dumps({
-        "status": "success",
+        "status": "SUCCESS",  ## this must correspond to a value in JobReportStatus in common -> Enumerations in order to be processed by the main app
         "input": download_uri,
         "jobId": job_id,
         "metadata": meta_dict
@@ -102,7 +103,7 @@ def report_error(callback_uri, description, attempt=0):
         log = description + "\n" + traceback.format_exc()
 
     content = json.dumps({
-        "status": "error",
+        "status": "FAILURE",    ## this must correspond to a value in JobReportStatus in common -> Enumerations in order to be processed by the main app
         "input": download_uri,
         "jobId": job_id,
         "log": base64.b64encode(log)

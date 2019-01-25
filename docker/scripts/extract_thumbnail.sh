@@ -26,7 +26,7 @@ fi
 echo Downloading source media $1...
 aws s3 cp "$1" /tmp/mediafile
 if [ "$?" != "0" ]; then
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"Could not download source media","jobId":"'"$4"'","input":"'"$1"'"}'
+    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"Could not download source media","jobId":"'"$4"'","input":"'"$1"'"}'
     echo Could not download source media.
     exit 1
 fi
@@ -48,10 +48,16 @@ elif [[ "$MIMETYPE" =~ ^image.* ]]; then
     mv /tmp/mediafile /tmp/imagefile
     extract_image_thumbnail.sh "$1" "$2" "$3" "$4"
     exit $?
+elif [[ "$MIMETYPE" == "application/octet-stream" ]]; then
+    #if we don't know, assume video
+    echo Assuming video for application/octet-stream
+    mv /tmp/mediafile /tmp/videofile
+    extract_video_thumbnail.sh "$1" "$2" "$3" "$4"
+    exit $?
 else
     echo ${MIMETYPE} files are not supported yet
     echo Script failed. Informing server...
     echo Server callback URL is $3
-    aws sns publish --topic-arn $3 --message '{"status":"error","log":"MIME type of file ('$MIMETYPE') not supported.","jobId":"'"$4"'","input":"'"$1"'"}'
+    aws sns publish --topic-arn $3 --message '{"status":"FAILURE","log":"MIME type of file ('$MIMETYPE') not supported.","jobId":"'"$4"'","input":"'"$1"'"}'
     exit 1
 fi
