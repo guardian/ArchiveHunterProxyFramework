@@ -109,7 +109,7 @@ def report_error(callback_uri, description, attempt=0):
         "log": base64.b64encode(log)
     })
     print "Logging error to server at {0}: {1}".format(callback_uri, content)
-    send_sns(callback_uri, content)
+    send_sns(content)
 
 
 #START MAIN
