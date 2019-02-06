@@ -1,3 +1,5 @@
+import java.net.URLDecoder
+
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
 import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
 import com.amazonaws.services.elastictranscoder.model._
@@ -115,7 +117,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
 
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
-          command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", model.inputMediaUri, model.targetLocation, settings.replyTopic, model.jobId),
+          command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", URLDecoder.decode(model.inputMediaUri, "UTF-8"), URLDecoder.decode(model.targetLocation,"UTF-8"), settings.replyTopic, model.jobId),
           environment = Map(),
           name = s"extract_thumbnail_${model.jobId.toString}",
           cpu = None
@@ -130,7 +132,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
 
       case RequestType.ANALYSE=>
         taskMgr.runTask(
-          command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", model.inputMediaUri, settings.replyTopic, model.jobId),
+          command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", URLDecoder.decode(model.inputMediaUri, "UTF-8"), settings.replyTopic, model.jobId),
           environment = Map(),
           name = s"analyze_media_${model.jobId.toString}",
           cpu = None
@@ -144,7 +146,6 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         }
       case RequestType.PROXY=>
         implicit val etsClient = getEtsClient
-        //FIXME: targetLocation is actually the BUCKET, not the URI, of the target.
         val input = PathFunctions.breakdownS3Uri(model.inputMediaUri)
         val outputBucket = model.targetLocation
         val outputPrefix = PathFunctions.removeExtension(input._2) match {
