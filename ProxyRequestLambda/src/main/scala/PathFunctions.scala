@@ -1,5 +1,6 @@
 import java.net.URI
 import scala.util.matching.Regex
+import java.net.URLDecoder
 
 object PathFunctions {
   val removeXtnRegex:Regex = "^(.*)\\.([^\\.]+)$".r
@@ -31,7 +32,7 @@ object PathFunctions {
     if(u.getHost==null){  //if there is no s3:// prefix, then we only get path back. So assume that';s the bucket.
       (u.getPath, "")
     } else {
-      (u.getHost, stripped(u.getPath))
+      (u.getHost, stripped(URLDecoder.decode(u.getPath,"UTF-8")))
     }
   }
 }

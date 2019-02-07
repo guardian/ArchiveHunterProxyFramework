@@ -24,6 +24,16 @@ class PathFunctionsSpec extends Specification {
       result mustEqual("bucket","")
     }
 
+    "remove url-encoding from returned portions" in {
+      val result = PathFunctions.breakdownS3Uri("s3://bucket/path/to/my+file+with+spaces.ext")
+      result mustEqual ("bucket","path/to/my file with spaces.ext")
+    }
+
+    "remove url-encoding from returned portions again" in {
+      val result = PathFunctions.breakdownS3Uri("s3://bucket/path/to/my%20file%20with%20spaces.ext")
+      result mustEqual ("bucket","path/to/my file with spaces.ext")
+    }
+
     "hmm" in {
       val result = PathFunctions.breakdownS3Uri("bucket-name")
       result mustEqual("bucket-name","")
