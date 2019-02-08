@@ -5,10 +5,11 @@ import os.path
 import argparse
 from functools import reduce
 
-refs_to_find = ["RequestLambda","TranscoderReplyLambda"]
+refs_to_find = ["RequestLambda","TranscoderReplyLambda", "SweeperLambda"]
 jars_for_ref = ["ProxyRequestLambda/target/scala-2.12/proxyRequestLambda.jar",
-                "TranscoderReplyLambda/target/scala-2.12/transcoderReplyLambda.jar"]
-upload_path_selector = ["archivehunter-proxyrequest-lambda","archivehunter-transcoderreply-lambda"]
+                "TranscoderReplyLambda/target/scala-2.12/transcoderReplyLambda.jar",
+                "SweeperLambda/target/scala-2.12/sweeperLambda.jar"]
+upload_path_selector = ["archivehunter-proxyrequest-lambda","archivehunter-transcoderreply-lambda", "archivehunter-sweeper-lambda"]
 
 regional_buckets = {
     "eu-west-1": "gnm-multimedia-rr-deployables",
@@ -92,27 +93,42 @@ def get_stack_parameters(stack_name):
 parser = argparse.ArgumentParser()
 parser.add_argument("--stackname","-s",help="Name of the deployed Cloudformation stack we are updating")
 parser.add_argument("--region","-r",help="Region that the stack is deployed in")
+parser.add_argument("--initial","-i",
+                    action="store_true",
+                    default=False,
+                    help="Upload jars but do not attempt to update lambda functions. Use this prior to deploying the cloudformation.")
+parser.add_argument("--stackparam",help="stack identifier tag when performing intial upload")
+parser.add_argument("--stageparam",help="stage identifier tag when performing intial upload")
+
 opts = parser.parse_args()
 
 s3 = boto3.resource("s3", region_name=opts.region)
 lambda_client = boto3.client("lambda", region_name=opts.region)
 cloudformation = boto3.client("cloudformation", region_name=opts.region)
 
-params = get_stack_parameters(opts.stackname)
-print("Found stack parameters {0}".format(params))
+if not opts.initial:
+    params = get_stack_parameters(opts.stackname)
+    print("Found stack parameters {0}".format(params))
 
-function_names = locate_functions(opts.stackname)
-print("Found functions to update: {0}".format(function_names))
-if len(function_names)!=len(refs_to_find):
-    print("ERROR: could not find correct number of functions to update!")
-    exit(1)
+    function_names = locate_functions(opts.stackname)
+    print("Found functions to update: {0}".format(function_names))
+    if len(function_names)!=len(refs_to_find):
+        print("ERROR: could not find correct number of functions to update!")
+        exit(1)
+else:
+    params = {
+        "Stack": opts.stackparam,
+        "Stage": opts.stageparam
+    }
+    function_names = []
 
 print("---------------------------------------------")
 for idx in range(0, len(refs_to_find)):
     uploaded_path = upload_jar(jars_for_ref[idx], regional_buckets[opts.region], upload_path_for(params,upload_path_selector[idx]))
     print("Uploaded JAR to {0}".format(uploaded_path))
-    publish_version(function_names[idx],regional_buckets[opts.region],uploaded_path)
-    print("{0} has been updated".format(function_names[idx]))
+    if not opts.initial:
+        publish_version(function_names[idx],regional_buckets[opts.region],uploaded_path)
+        print("{0} has been updated".format(function_names[idx]))
     print("---------------------------------------------")
 
 print("\nUpdate completed.")
