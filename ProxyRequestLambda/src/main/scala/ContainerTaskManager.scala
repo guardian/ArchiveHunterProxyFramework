@@ -3,10 +3,17 @@ import org.apache.logging.log4j.LogManager
 import com.amazonaws.services.ecs.model._
 
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskContainerName:String,subnets:Option[Seq[String]]){
   private val logger = LogManager.getLogger(getClass)
+
+  def getPendingTaskCount(implicit client:AmazonECS) = Try {
+    val rq = new DescribeTasksRequest().withCluster(clusterName)
+    val result = client.describeTasks(rq)
+
+    result.getTasks.asScala.filter(_.getDesiredStatus!="STOPPED").length
+  }
 
   def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {
 
@@ -40,7 +47,11 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
       logger.error(s"Failed to launch task: ${failures.head.getArn} ${failures.head.getReason}")
       Failure(new RuntimeException(failures.head.toString))
     } else {
-      Success(result.getTasks.asScala.head)
+      if(result.getTasks.isEmpty){
+        Failure(new RuntimeException("No failures logged but no tasks started"))
+      } else {
+        Success(result.getTasks.asScala.head)
+      }
     }
   }
 }

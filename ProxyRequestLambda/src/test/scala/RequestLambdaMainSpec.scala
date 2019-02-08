@@ -7,13 +7,15 @@ import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.lambda.runtime.events.SNSEvent.SNSRecord
 import com.amazonaws.services.sns.AmazonSNS
 import com.amazonaws.services.sns.model.{PublishRequest, PublishResult}
+import com.amazonaws.services.sqs.AmazonSQS
+import com.amazonaws.services.sqs.model.SendMessageResult
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import io.circe.syntax._
 import io.circe.generic.auto._
 
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
@@ -30,6 +32,10 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
@@ -47,6 +53,10 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
@@ -64,6 +74,10 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
@@ -81,6 +95,11 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
@@ -107,6 +126,10 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
         override def getEcsClient: AmazonECS = mockedEcsClient
 
         override def getEtsClient: AmazonElasticTranscoder = mockedEtsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
 
         override val etsPipelineManager: ETSPipelineManager = mockedPipelineManager
       }
@@ -141,6 +164,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
         override def getEtsClient: AmazonElasticTranscoder = mockedEtsClient
 
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
         override def getSnsClient: AmazonSNS = mockedSnsClient
         override val etsPipelineManager: ETSPipelineManager = mockedPipelineManager
       }
@@ -169,13 +193,57 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mock[AmazonECS]
-        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset")
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+
+        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50)
 
         override def processRequest(model: RequestModel, settings:Settings, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, settings, taskMgr)
+
+        override def checkEcsCapacity(model: RequestModel, settings: Settings, taskMgr: ContainerTaskManager): Boolean = true
       }
 
       val result = toTest.handleRequest(evt, mock[Context])
       there was one(mockProcessRecord).apply(any,any,any)
+    }
+
+    "send excess requests to the flood queue" in {
+      val actualRequest = RequestModel(RequestType.ANALYSE,"input-uri","target-location","job-id",None,None,None)
+      val recods = List(
+        new SNSRecord().withSns(new SNSEvent.SNS().withMessage(actualRequest.asJson.toString)),
+        new SNSRecord().withSns(new SNSEvent.SNS().withMessage(actualRequest.asJson.toString)),
+        new SNSRecord().withSns(new SNSEvent.SNS().withMessage(actualRequest.asJson.toString)),
+      )
+      val evt = new SNSEvent().withRecords(recods.asJava)
+
+      val mockProcessRecord = mock[Function3[RequestModel,Settings,ContainerTaskManager,Future[Either[String,String]]]]
+      mockProcessRecord.apply(any,any,any) returns Future(Right("mock was called"))
+
+      val mockSendToFloodQueue = mock[Function3[AmazonSQS, RequestModel, String, Try[SendMessageResult]]]
+      mockSendToFloodQueue.apply(any, any, any).returns(Success(new SendMessageResult().withMessageId("fake-id")))
+
+      val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mock[AmazonECS]
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+
+        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50)
+
+        override def processRequest(model: RequestModel, settings:Settings, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, settings, taskMgr)
+
+        override def sendToFloodQueue(sqsClient: AmazonSQS, rq: RequestModel, floodQueue: String): Try[SendMessageResult] = mockSendToFloodQueue(sqsClient, rq, floodQueue)
+        val mockCheckCapacity = mock[Function3[RequestModel, Settings,ContainerTaskManager, Boolean]]
+        mockCheckCapacity.apply(any, any, any).returns(true, true, false)
+        override def checkEcsCapacity(model: RequestModel, settings: Settings, taskMgr: ContainerTaskManager): Boolean = mockCheckCapacity(model, settings, taskMgr)
+      }
+
+      val result = toTest.handleRequest(evt, mock[Context])
+      there were two(mockProcessRecord).apply(any,any,any)
+      there was one(mockSendToFloodQueue)
     }
   }
 }

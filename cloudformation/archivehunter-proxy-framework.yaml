@@ -126,6 +126,15 @@ Resources:
             - sns:Publish
             Resource:
             - !Ref ReplyTopic
+      - PolicyName: FloodQueue
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource:
+              - !GetAtt FloodQueue.Arn
       - PolicyName: TranscoderAccess
         PolicyDocument:
           Version: 2012-10-17
@@ -190,12 +199,15 @@ Resources:
           ETS_MESSAGE_TOPIC: !Ref TranscoderReplyTopic
           VIDEO_PRESET_ID: !Ref VideoTranscodingPresetId
           AUDIO_PRESET_ID: !Ref AudioTranscodingPresetId
+          FLOOD_QUEUE: !Ref FloodQueue
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
       Role: !GetAtt RequestLambdaRole.Arn
       Runtime: java8
       Timeout: 60
+      DeadLetterConfig:
+        TargetArn: !GetAtt FloodQueue.Arn
       Tags:
       - Key: App
         Value: !Ref App
@@ -468,10 +480,10 @@ Resources:
           MESSAGE_LIMIT: 20
       Handler: SweeperLambdaMain
       FunctionName: !Sub archivehunter-sweeperlambda-${Stage}
-      MemorySize: 768
+      MemorySize: 512
       Role: !GetAtt SweeperLambdaRole.Arn
       Runtime: java8
-      Timeout: 60
+      Timeout: 20
       Tags:
         - Key: App
           Value: !Ref App
