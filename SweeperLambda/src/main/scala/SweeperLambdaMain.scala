@@ -26,7 +26,10 @@ class SweeperLambdaMain extends RequestHandler[java.util.LinkedHashMap[String,Ob
     * @return true if there are potentially more to go, false if we stop now.
     */
   def pullMessages(queueUrl:String, topicArn:String, client:AmazonSQS, snsClient:AmazonSNS) = {
-    val baseRq = new ReceiveMessageRequest().withQueueUrl(queueUrl).withWaitTimeSeconds(2)
+    //use short polling by default, return nothing if we can't find it.
+    //note, that this queries a subset of servers so might not get everything, anyway.
+    //assumption is that there should not be much hanging around on the queue though.
+    val baseRq = new ReceiveMessageRequest().withQueueUrl(queueUrl).withWaitTimeSeconds(0)
     val rq = messageLimit match {
       case None=>baseRq
         //SQS will receive a maximum of 10 messages in a batch
