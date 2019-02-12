@@ -1,7 +1,7 @@
 import com.amazonaws.services.ecs.AmazonECS
 import com.amazonaws.services.ecs.model.Task
 import com.amazonaws.services.elastictranscoder.AmazonElasticTranscoder
-import com.amazonaws.services.elastictranscoder.model.Pipeline
+import com.amazonaws.services.elastictranscoder.model.{AmazonElasticTranscoderException, Pipeline}
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.lambda.runtime.events.SNSEvent.SNSRecord
@@ -21,6 +21,58 @@ import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 
 class RequestLambdaMainSpec extends Specification with Mockito with RequestModelEncoder {
+  "RequestLambdaMain.checkETSShouldFloodqueue" should {
+    "return true if the error is an ETS error indicating throttling exception" in {
+      val mockedTaskMgr = mock[ContainerTaskManager]
+      val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
+
+      val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+      }
+      val ex = new AmazonElasticTranscoderException("error")
+      ex.setErrorCode("ThrottlingException")
+      toTest.checkETSShouldFloodqueue(ex) mustEqual true
+    }
+
+    "return false if the error is an ETS error not indicating throttling exception" in {
+      val mockedTaskMgr = mock[ContainerTaskManager]
+      val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
+
+      val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+      }
+      val ex = new AmazonElasticTranscoderException("error")
+      ex.setErrorCode("InvalidDataError")
+      toTest.checkETSShouldFloodqueue(ex) mustEqual false
+    }
+
+    "return false if the error is not an ETS error" in {
+      val mockedTaskMgr = mock[ContainerTaskManager]
+      val mockedEcsClient = mock[AmazonECS]
+      val mockedSettings = mock[Settings]
+
+      val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getSnsClient: AmazonSNS = mock[AmazonSNS]
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+      }
+      val ex = new RuntimeException("error")
+      toTest.checkETSShouldFloodqueue(ex) mustEqual false
+    }
+  }
+
   "RequestLambdaMain.processRequest" should {
     "call out to taskMgr.RunTask for a THUMBNAIL action" in {
       val mockedTaskMgr = mock[ContainerTaskManager]
@@ -113,7 +165,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val mockedPipelineManager = mock[ETSPipelineManager]
       mockedPipelineManager.findPipelineFor(any,any)(any) returns Success(Seq(mockedPipeline))
-      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Right("job-id")
+      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Success("job-id")
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
       val mockedEtsClient = mock[AmazonElasticTranscoder]
@@ -147,7 +199,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
       val mockedPipelineManager = mock[ETSPipelineManager]
       mockedPipelineManager.findPipelineFor(any,any)(any) returns Success(Seq())
-      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Right("job-id")
+      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) returns Success("job-id")
       mockedPipelineManager.createEtsPipeline(any,any)(any) returns Success(mockedPipeline)
       val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]

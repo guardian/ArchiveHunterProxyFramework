@@ -107,6 +107,13 @@ Resources:
             - !GetAtt ProxyingCluster.Arn
             - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/*
             - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/*
+      - PolicyName: ContainerCheck
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: ecs:DescribeTasks
+              Resource: "*"
       - PolicyName: ContainerRoleAccess
         PolicyDocument:
           Version: 2012-10-17

@@ -9,10 +9,12 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
   private val logger = LogManager.getLogger(getClass)
 
   def getPendingTaskCount(implicit client:AmazonECS) = Try {
-    val rq = new DescribeTasksRequest().withCluster(clusterName)
-    val result = client.describeTasks(rq)
-
-    result.getTasks.asScala.filter(_.getDesiredStatus!="STOPPED").length
+//    val rq = new DescribeTasksRequest().withCluster(clusterName)
+//    val result = client.describeTasks(rq)
+//
+//    result.getTasks.asScala.filter(_.getDesiredStatus!="STOPPED").length
+    val result = client.describeClusters(new DescribeClustersRequest().withClusters(clusterName))
+    result.getClusters.asScala.head.getRunningTasksCount //we only asked for one cluster, so we should only get one.
   }
 
   def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {

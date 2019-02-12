@@ -1,4 +1,6 @@
 import java.net.URLDecoder
+
+import com.amazonaws.services.ecs.model.AmazonECSException
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
 import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
 import com.amazonaws.services.elastictranscoder.model._
@@ -8,9 +10,11 @@ import com.amazonaws.services.sns.AmazonSNSClientBuilder
 import com.amazonaws.services.sns.model.PublishRequest
 import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
 import com.amazonaws.services.sqs.model.SendMessageRequest
+
 import scala.collection.JavaConverters._
 import io.circe.syntax._
 import io.circe.generic.auto._
+
 import scala.annotation.switch
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -46,6 +50,25 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     randomStringFromCharList(length, chars)
   }
 
+  /**
+    * should the given ETS error be sent to the flood queue?
+    * @param err AmazonElasticTranscoderException that occurred
+    * @return a boolean indicating whether to go to flood queue or not.
+    */
+  def checkETSShouldFloodqueue(err:Throwable) = {
+    try {
+      val etsError = err.asInstanceOf[AmazonElasticTranscoderException]
+      etsError.getErrorCode=="ThrottlingException"
+    } catch {
+      case err:ClassCastException=>
+        false
+      case err:Throwable=>
+        println(err.toString)
+        false
+    }
+  }
+
+
   def doSetupPipeline(model:RequestModel, fromBucket:String, toBucket:String, settings:Settings)(implicit etsClient:AmazonElasticTranscoder) = {
     val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
     println(s"Attempting to create a pipeline request with name $pipelineName")
@@ -78,6 +101,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     * @return a Try, with either the SendMessageResult or an error
     */
   protected def sendToFloodQueue(sqsClient:AmazonSQS, rq:RequestModel, floodQueue:String) = Try {
+    println("Sending message to flood queue")
     val sendRq = new SendMessageRequest()
       .withQueueUrl(floodQueue)
       .withMessageBody(rq.asJson.toString)
@@ -105,6 +129,9 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       }
     case Failure(err)=>
       println(s"ERROR: Could not check pending task count; $err")
+      if(err.isInstanceOf[AmazonECSException]){
+
+      }
       false
   }
 
@@ -236,14 +263,26 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             Failure(new RuntimeException("No pipeline available to process this media"))
           } else {
             println(s"Starting job on pipeline ${pipelineList.head}")
-            Success(etsPipelineManager.makeJobRequest(input._2,outputPrefix, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get))
+            Try { etsPipelineManager.makeJobRequest(input._2,outputPrefix, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get) }
           }
         }) match {
           case Failure(err)=>
             println(s"Unable to start transcoding job: $err")
-            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
-            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
-            Left(err.toString)
+            checkETSShouldFloodqueue(err) match {
+              case true=>
+                sendToFloodQueue(getSqsClient,model,settings.floodQueue) match {
+                  case Success(result)=>
+                    println("Rate limiting detected, dispatching to flood queue")
+                    Left("dispatched to flood queue")
+                  case Failure(qError)=>
+                    println(s"Could not dispatch to flood queue: ${qError.toString}")
+                    Left(qError.toString)
+                }
+              case false=>
+                val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
+                snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+                Left(err.toString)
+            }
           case Success(_)=>
             Right("Starting transcoding job")
         }

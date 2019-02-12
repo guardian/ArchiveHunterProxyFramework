@@ -110,21 +110,16 @@ class ETSPipelineManager {
       result.getPipeline
     }
 
-  def makeJobRequest(inputPath:String,outputPath:String, presetId:String, pipelineId:String, jobId:String, proxyType: ProxyType.Value)(implicit etsClient:AmazonElasticTranscoder) = {
+  def makeJobRequest(inputPath:String,outputPath:String, presetId:String, pipelineId:String, jobId:String, proxyType: ProxyType.Value)(implicit etsClient:AmazonElasticTranscoder) = Try {
     val rq = new CreateJobRequest()
       .withInput(new JobInput().withKey(inputPath))
       .withOutput(new CreateJobOutput().withKey(outputPath).withPresetId(presetId))
       .withPipelineId(pipelineId)
       //base64 encoded version of this can be no more than 256 bytes!
       .withUserMetadata(Map("archivehunter-job-id" -> jobId, "proxy-type" -> proxyType.toString).asJava)
-    try {
+
       val result = etsClient.createJob(rq)
       println(s"Started transcode job with ID ${result.getJob.getId}")
-      Right(result.getJob.getId)
-    } catch {
-      case err:Throwable=>
-        println(s"ERROR: Could not start transcode job: $err")
-        Left(err.toString)
-    }
+      result.getJob.getId
   }
 }
