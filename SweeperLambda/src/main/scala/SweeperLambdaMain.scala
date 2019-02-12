@@ -7,9 +7,12 @@ import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
 import com.amazonaws.services.sqs.model.ReceiveMessageRequest
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 class SweeperLambdaMain extends RequestHandler[java.util.LinkedHashMap[String,Object],Unit]{
-  protected def getSqsQueue = sys.env("FLOOD_QUEUE_URL")
+  protected def getSqsQueues = Seq(sys.env("FLOOD_QUEUE_URL"),sys.env("TRANSCODER_FLOOD_QUEUE"))
   protected def getSnsTopic = sys.env("INPUT_TOPIC_ARN")
   protected def messageLimit = sys.env.get("MESSAGE_LIMIT").map(_.toInt)
 
@@ -62,15 +65,19 @@ class SweeperLambdaMain extends RequestHandler[java.util.LinkedHashMap[String,Ob
   override def handleRequest(i: util.LinkedHashMap[String, Object], context: Context): Unit = {
     println("Sweeper lambda starting up")
 
-    var ctr=0
-    var received = 0
-    do {
-      println("Pulling more messages")
-      received = pullMessages(getSqsQueue, getSnsTopic, getSqsClient, getSnsClient)
-      ctr += received
-      println(s"Processed message count: $ctr")
-    } while (received>0)
+    val futures = getSqsQueues.map(queueName=>Future {
+      var ctr = 0
+      var received = 0
+      do {
+        println(s"Pulling more messages for $queueName")
+        received = pullMessages(queueName, getSnsTopic, getSqsClient, getSnsClient)
+        ctr += received
+        println(s"Processed message count: $ctr")
+      } while (received > 0)
+      ctr
+    })
 
+    Await.ready(Future.sequence(futures), 60.seconds)
     println("Sweeper lambda completed")
   }
 }
