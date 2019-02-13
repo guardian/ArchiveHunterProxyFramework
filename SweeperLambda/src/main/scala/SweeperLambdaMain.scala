@@ -4,7 +4,7 @@ import com.amazonaws.services.lambda.runtime.{Context, RequestHandler}
 import com.amazonaws.services.sns.{AmazonSNS, AmazonSNSClientBuilder}
 import com.amazonaws.services.sns.model.{MessageAttributeValue, PublishRequest}
 import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
-import com.amazonaws.services.sqs.model.ReceiveMessageRequest
+import com.amazonaws.services.sqs.model.{DeleteMessageRequest, ReceiveMessageRequest}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
@@ -57,13 +57,14 @@ class SweeperLambdaMain extends RequestHandler[java.util.LinkedHashMap[String,Ob
 
         val result = snsClient.publish(sendRq)
         println(s"Re-sent message with id ${result.getMessageId}")
+        client.deleteMessage(new DeleteMessageRequest().withQueueUrl(queueUrl).withReceiptHandle(msg.getReceiptHandle))
       })
       msgs.length
     }
   }
 
   override def handleRequest(i: util.LinkedHashMap[String, Object], context: Context): Unit = {
-    println("Sweeper lambda starting up")
+    println(s"Sweeper lambda starting up.  Message limit is ${messageLimit.getOrElse(999)}")
 
     val futures = getSqsQueues.map(queueName=>Future {
       var ctr = 0
@@ -73,7 +74,7 @@ class SweeperLambdaMain extends RequestHandler[java.util.LinkedHashMap[String,Ob
         received = pullMessages(queueName, getSnsTopic, getSqsClient, getSnsClient)
         ctr += received
         println(s"Processed message count: $ctr")
-      } while (received > 0)
+      } while (received > 0 && ctr<=messageLimit.getOrElse(999))
       ctr
     })
 

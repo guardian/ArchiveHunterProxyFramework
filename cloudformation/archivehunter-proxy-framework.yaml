@@ -142,6 +142,7 @@ Resources:
               - sqs:SendMessage
             Resource:
               - !GetAtt FloodQueue.Arn
+              - !GetAtt RequestDeadLetter.Arn
       - PolicyName: TranscoderAccess
         PolicyDocument:
           Version: 2012-10-17
@@ -214,7 +215,7 @@ Resources:
       Runtime: java8
       Timeout: 60
       DeadLetterConfig:
-        TargetArn: !GetAtt FloodQueue.Arn
+        TargetArn: !GetAtt RequestDeadLetter.Arn
       Tags:
       - Key: App
         Value: !Ref App
@@ -565,6 +566,17 @@ Resources:
                 - !Ref InputTopic
 
   FloodQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: App
+          Value: !Ref App
+        - Key: Stack
+          Value: !Ref Stack
+        - Key: Stage
+          Value: !Ref Stage
+
+  RequestDeadLetter:
     Type: AWS::SQS::Queue
     Properties:
       Tags:
