@@ -20,6 +20,12 @@ deployments:
       functionNames: [archivehunter-transcoderreply-]
       fileName: transcoderReplyLambda.jar
 
+  archivehunter-sweeper-lambda:
+    template: lambda
+    parameters:
+      functionNames: [archivehunter-sweeperlambda-]
+      fileName: sweeperLambda.jar
+
 #  archivehunter-proxyecsalert-lambda:
 #    template: lambda
 #    parameters:
