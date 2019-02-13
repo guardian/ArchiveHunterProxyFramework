@@ -1,26 +1,83 @@
 import com.amazonaws.services.elastictranscoder.AmazonElasticTranscoderClientBuilder
-import com.amazonaws.services.elastictranscoder.model.Pipeline
+import com.amazonaws.services.elastictranscoder.model.{AmazonElasticTranscoderException, Pipeline}
 import com.amazonaws.services.lambda.runtime.{Context, RequestHandler}
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.sns.AmazonSNSAsyncClientBuilder
 import com.amazonaws.services.sns.model.PublishRequest
+import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
+import com.amazonaws.services.sqs.model.SendMessageRequest
 
 import scala.collection.JavaConverters._
 import io.circe.syntax._
 import io.circe.generic.auto._
 
+import scala.util.{Failure, Success, Try}
+
 class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMessageDecoder with RequestModelEncoder with JobReportStatusEncoder {
   val snsClient = AmazonSNSAsyncClientBuilder.defaultClient()
   val etsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
+
+  def getSqsClient = AmazonSQSClientBuilder.defaultClient()
 
   def getReplyTopic = sys.env.get("REPLY_TOPIC_ARN") match {
     case Some(str)=>str
     case None=>throw new RuntimeException("You need to specify REPLY_TOPIC_ARN")
   }
 
-  def getPipelineConfig(pipelineId:String) = {
+  def getFloodQueue = sys.env.get("FLOOD_QUEUE") match {
+    case Some(str)=>str
+    case None=>throw new RuntimeException("You need to specify FLOOD_QUEUE")
+  }
+
+  def getPipelineConfig(pipelineId:String) = Try {
     val result = etsClient.listPipelines()
     result.getPipelines.asScala.find(_.getId==pipelineId)
+  }
+
+  /**
+    * should the given ETS error be sent to the flood queue?
+    * @param err AmazonElasticTranscoderException that occurred
+    * @return a boolean indicating whether to go to flood queue or not.
+    */
+  def checkETSShouldFloodqueue(err:Throwable) = {
+    try {
+      val etsError = err.asInstanceOf[AmazonElasticTranscoderException]
+      etsError.getErrorCode=="ThrottlingException"
+    } catch {
+      case err:ClassCastException=>
+        false
+      case err:Throwable=>
+        println(err.toString)
+        false
+    }
+  }
+
+  /**
+    * return a randomised number suitable for message delay
+    * @return
+    */
+  def randomDelay:Int = {
+    val upperLimit = 600
+    val lowerLimit = 60
+    val rnd = new scala.util.Random
+    lowerLimit + rnd.nextInt((upperLimit - lowerLimit)+1)
+  }
+
+  /**
+    * re-serialize the request and push it onto the flood queue.
+    * @param sqsClient AmazonSQS instance
+    * @param rq requestModel to send
+    * @param floodQueue URL of the flood queue
+    * @return a Try, with either the SendMessageResult or an error
+    */
+  protected def sendToFloodQueue(sqsClient:AmazonSQS, msg:AwsElasticTranscodeMsg, floodQueue:String) = Try {
+    println("Sending message to flood queue")
+    val sendRq = new SendMessageRequest()
+      .withQueueUrl(floodQueue)
+      .withMessageBody(msg.asJson.toString)
+      .withDelaySeconds(randomDelay) //use a randomised delay so the messages don't all come back through at the same time
+
+    sqsClient.sendMessage(sendRq)
   }
 
   def getOutputUri(plConfig:Pipeline,outputPath:String) = s"s3://${plConfig.getOutputBucket}/$outputPath"
@@ -45,12 +102,20 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
             maybeOutputPath match {
               case Some(outputPath)=>
                 getPipelineConfig(msg.pipelineId) match {
-                  case None=>
+                  case Success(None)=>
                     println(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?")
                     Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,jobId,"",Some(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?"), maybeProxyType, None))
-                  case Some(plConfig)=>
+                  case Success(Some(plConfig))=>
                     val outputUri = getOutputUri(plConfig, outputPath)
                     Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(outputUri),jobId,"",msg.messageDetails, maybeProxyType, None))
+                  case Failure(err)=>
+                    checkETSShouldFloodqueue(err) match {
+                      case true=>
+                        sendToFloodQueue(getSqsClient, msg, getFloodQueue)
+                        None
+                      case false=>
+                        throw err
+                    }
                 }
               case None=>
                 println("ERROR: Success message with no outputs? This shouldn't happen.")

@@ -9,6 +9,7 @@ import io.circe.syntax._
 import io.circe.generic.auto._
 
 import scala.collection.JavaConverters._
+import scala.util.{Success, Try}
 
 class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEncoder with TranscoderMessageDecoder with JobReportStatusEncoder {
   "ReplyLambdaMain.processMessage" should {
@@ -89,7 +90,7 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
         override val snsClient: AmazonSNSAsync = mockedSnsClient
         override def getReplyTopic: String = "fake-reply-topic"
 
-        override def getPipelineConfig(pipelineId: String): Option[Pipeline] = Some(new Pipeline().withOutputBucket("proxybucket"))
+        override def getPipelineConfig(pipelineId: String): Try[Option[Pipeline]] = Success(Some(new Pipeline().withOutputBucket("proxybucket")))
       }
 
       val result = main.processMessage(fakeMsg,"reply-topic")

@@ -19,7 +19,7 @@ class ETSPipelineManagerSpec extends Specification with Mockito {
           .withPipelineId("pipeline-id")
           .withUserMetadata(Map("archivehunter-job-id"->"job-uuid","proxy-type"->"UNKNOWN").asJava)
       there was one(mockedEtsClient).createJob(expectedJobRequest)
-      result must beRight("ets-job-id")
+      result must beSuccessfulTry("ets-job-id")
     }
 
     "error with a Left if the create job request fails" in {
@@ -35,7 +35,7 @@ class ETSPipelineManagerSpec extends Specification with Mockito {
         .withPipelineId("pipeline-id")
         .withUserMetadata(Map("archivehunter-job-id"->"job-uuid","proxy-type"->"UNKNOWN").asJava)
       there was one(mockedEtsClient).createJob(expectedJobRequest)
-      result must beLeft("java.lang.RuntimeException: my hovercraft is full of eels")
+      result must beFailedTry
     }
   }
 }

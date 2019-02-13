@@ -1,5 +1,6 @@
 import java.net.URLDecoder
 
+import com.amazonaws.services.ecs.model.AmazonECSException
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
 import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
 import com.amazonaws.services.elastictranscoder.model._
@@ -7,18 +8,22 @@ import com.amazonaws.services.lambda.runtime.{Context, RequestHandler}
 import com.amazonaws.services.lambda.runtime.events.SNSEvent
 import com.amazonaws.services.sns.AmazonSNSClientBuilder
 import com.amazonaws.services.sns.model.PublishRequest
+import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
+import com.amazonaws.services.sqs.model.SendMessageRequest
 
 import scala.collection.JavaConverters._
 import io.circe.syntax._
 import io.circe.generic.auto._
 
+import scala.annotation.switch
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.concurrent.duration._
 
 class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelEncoder with JobReportStatusEncoder {
   def getSnsClient = AmazonSNSClientBuilder.defaultClient()
+  def getSqsClient = AmazonSQSClientBuilder.defaultClient()
   def getEcsClient = AmazonECSClientBuilder.defaultClient()
   def getEtsClient = AmazonElasticTranscoderClientBuilder.defaultClient()
 
@@ -45,6 +50,25 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     randomStringFromCharList(length, chars)
   }
 
+  /**
+    * should the given ETS error be sent to the flood queue?
+    * @param err AmazonElasticTranscoderException that occurred
+    * @return a boolean indicating whether to go to flood queue or not.
+    */
+  def checkETSShouldFloodqueue(err:Throwable) = {
+    try {
+      val etsError = err.asInstanceOf[AmazonElasticTranscoderException]
+      etsError.getErrorCode=="ThrottlingException"
+    } catch {
+      case err:ClassCastException=>
+        false
+      case err:Throwable=>
+        println(err.toString)
+        false
+    }
+  }
+
+
   def doSetupPipeline(model:RequestModel, fromBucket:String, toBucket:String, settings:Settings)(implicit etsClient:AmazonElasticTranscoder) = {
     val pipelineName = s"archivehunter_${randomAlphaNumericString(10)}"
     println(s"Attempting to create a pipeline request with name $pipelineName")
@@ -68,6 +92,67 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         Left("Could not create pipeline")
     }
   }
+
+  /**
+    * re-serialize the request and push it onto the flood queue.
+    * @param sqsClient AmazonSQS instance
+    * @param rq requestModel to send
+    * @param floodQueue URL of the flood queue
+    * @return a Try, with either the SendMessageResult or an error
+    */
+  protected def sendToFloodQueue(sqsClient:AmazonSQS, rq:RequestModel, floodQueue:String) = Try {
+    println("Sending message to flood queue")
+    val sendRq = new SendMessageRequest()
+      .withQueueUrl(floodQueue)
+      .withMessageBody(rq.asJson.toString)
+      .withDelaySeconds(randomDelay) //use a randomised delay so the messages don't all come back through at the same time
+
+    sqsClient.sendMessage(sendRq)
+  }
+
+  /**
+    * check whether there are more tasks in an active state than we should have.
+    * if the request fails, then false is returned; the assumption is that any failure in this would also
+    * cause further requests to fail.
+    * @param taskMgr ContainerTaskManager instance
+    * @param settings Settings object
+    * @return boolean, True if we should run the task immediately and False if we should push to flood queue
+    */
+  protected def checkTaskCount(taskMgr:ContainerTaskManager, settings:Settings) = taskMgr.getPendingTaskCount match {
+    case Success(count)=>
+      println(s"Got $count running tasks")
+      if(count>settings.maxRunningTasks){
+        println(s"Limiting to ${settings.maxRunningTasks}, sending to flood queue")
+        false
+      } else {
+        true
+      }
+    case Failure(err)=>
+      println(s"ERROR: Could not check pending task count; $err")
+      if(err.isInstanceOf[AmazonECSException]){
+
+      }
+      false
+  }
+
+  /**
+    * checks whether we should process a request or send it to the flood queue
+    * @param model RequestModel indicating the job to process
+    * @param settings lambda settings
+    * @param taskMgr ContainerTaskManagerInstance
+    * @return a boolean. True if we should process immediately, false if we should send to flood queue
+    */
+  def checkEcsCapacity(model:RequestModel, settings:Settings, taskMgr:ContainerTaskManager) = {
+    model.requestType match {
+      case RequestType.ANALYSE=>
+        checkTaskCount(taskMgr,settings)
+      case RequestType.THUMBNAIL=>
+        checkTaskCount(taskMgr,settings)
+      case _=>  //nothing else requires ECS
+        true
+    }
+  }
+
   /**
     * perform the request that we have been asked to
     * @param model RequestModel desribing the request to perform
@@ -144,6 +229,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             println(s"Could not launch task: $err")
             Left(err.toString)
         }
+
       case RequestType.PROXY=>
         implicit val etsClient = getEtsClient
         val input = PathFunctions.breakdownS3Uri(model.inputMediaUri)
@@ -177,14 +263,26 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
             Failure(new RuntimeException("No pipeline available to process this media"))
           } else {
             println(s"Starting job on pipeline ${pipelineList.head}")
-            Success(etsPipelineManager.makeJobRequest(input._2,outputPrefix, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get))
+            Try { etsPipelineManager.makeJobRequest(input._2,outputPrefix, presetId,pipelineList.head.getId,model.jobId, model.proxyType.get) }
           }
         }) match {
           case Failure(err)=>
             println(s"Unable to start transcoding job: $err")
-            val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
-            snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
-            Left(err.toString)
+            checkETSShouldFloodqueue(err) match {
+              case true=>
+                sendToFloodQueue(getSqsClient,model,settings.floodQueue) match {
+                  case Success(result)=>
+                    println("Rate limiting detected, dispatching to flood queue")
+                    Left("dispatched to flood queue")
+                  case Failure(qError)=>
+                    println(s"Could not dispatch to flood queue: ${qError.toString}")
+                    Left(qError.toString)
+                }
+              case false=>
+                val msgReply = MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,model.jobId,model.inputMediaUri,Some(s"Unable to start transcoding job: $err"),model.proxyType,None)
+                snsClient.publish(new PublishRequest().withMessage(msgReply.asJson.toString).withTopicArn(settings.replyTopic))
+                Left(err.toString)
+            }
           case Success(_)=>
             Right("Starting transcoding job")
         }
@@ -268,16 +366,31 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       sys.env.get("AUDIO_PRESET_ID") match {
         case Some(str)=>str
         case None=>throw new RuntimeException("You need to specify AUDIO_PRESET_ID")
-      }
-
+      },
+      sys.env.get("FLOOD_QUEUE") match {
+        case Some(str)=>str
+        case None=>throw new RuntimeException("You need to specify FLOOD_QUEUE")
+      },
+      sys.env.get("MAX_RUNNING_TASKS").map(_.toInt).getOrElse(50)
     )
+  }
+
+  /**
+    * return a randomised number suitable for message delay
+    * @return
+    */
+  def randomDelay:Int = {
+    val upperLimit = 600
+    val lowerLimit = 60
+    val rnd = new scala.util.Random
+    lowerLimit + rnd.nextInt((upperLimit - lowerLimit)+1)
   }
 
   override def handleRequest(evt: SNSEvent, context: Context): Unit = {
     val maybeReqeustsList = evt.getRecords.asScala.map(rec=>{
       io.circe.parser.parse(rec.getSNS.getMessage).flatMap(_.as[RequestModel])
     })
-
+    val sqsClient = getSqsClient
     val failures = maybeReqeustsList.collect({case Left(err)=>err})
 
     if(failures.nonEmpty){
@@ -289,8 +402,31 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
     val settings = getSettings
 
     val taskMgr = new ContainerTaskManager(settings.clusterName,settings.taskDefinitionName,settings.taskContainerName, settings.subnets)
-    val requests = maybeReqeustsList.collect({case Right(rq)=>rq})
-    val toWaitFor = Future.sequence(requests.map(rq=>processRequest(rq, settings, taskMgr)))
+    val initialRequestList = maybeReqeustsList.collect({case Right(rq)=>rq})
+
+    val requestsForNow = initialRequestList.filter(rq=>{
+      (checkEcsCapacity(rq, settings,taskMgr): @switch) match {
+        case true=>true
+        case false=>
+          sendToFloodQueue(sqsClient,rq,settings.floodQueue)
+          false
+      }
+    })
+
+    val toWaitFor = Future.sequence(
+      requestsForNow.map(rq=>
+        processRequest(rq, settings, taskMgr).recover({
+          case err:Throwable=>
+            if(err.getMessage.contains("Rate limit exceeded") ||
+              err.getMessage.contains("Throttling exception") ||
+              err.getMessage.contains("no tasks started")
+            ){
+              println("WARNING: requests are being throttled. Sending this message onto the flood queue.")
+              sendToFloodQueue(sqsClient,rq,settings.floodQueue)
+            }
+        })
+      )
+    )
 
     val results = Await.result(toWaitFor, 60.seconds)
 
