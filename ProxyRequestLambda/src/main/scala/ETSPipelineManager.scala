@@ -110,7 +110,18 @@ class ETSPipelineManager {
       result.getPipeline
     }
 
-  def makeJobRequest(inputPath:String,outputPath:String, presetId:String, pipelineId:String, jobId:String, proxyType: ProxyType.Value)(implicit etsClient:AmazonElasticTranscoder) = Try {
+  /**
+    * create a job on Elastic Transcoder
+    * @param inputPath path to input media in the S3 bucket for the pipeline referred to by `pipelineId`
+    * @param outputPath path to output media in the S3 bucket for the output pipeline referred to by `pipelineId`
+    * @param presetId ID of the preset to use for transcoding
+    * @param pipelineId ID of the pipeline to use for transcoding
+    * @param jobId ArchiveHunter job ID. this is carried with the job so that the app knows which entry the transcode is for
+    * @param proxyType ProxyType value indicating, well, the type of proxy to generate
+    * @param etsClient implicitly provided elastic transcoder client
+    * @return Success with the ETS Job ID, or a Failure indicating the error.
+    */
+  def makeJobRequest(inputPath:String,outputPath:String, presetId:String, pipelineId:String, jobId:String, proxyType: ProxyType.Value)(implicit etsClient:AmazonElasticTranscoder):Try[String] = Try {
     val rq = new CreateJobRequest()
       .withInput(new JobInput().withKey(inputPath))
       .withOutput(new CreateJobOutput().withKey(outputPath).withPresetId(presetId))

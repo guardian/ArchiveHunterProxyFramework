@@ -9,12 +9,8 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
   private val logger = LogManager.getLogger(getClass)
 
   def getPendingTaskCount(implicit client:AmazonECS) = Try {
-//    val rq = new DescribeTasksRequest().withCluster(clusterName)
-//    val result = client.describeTasks(rq)
-//
-//    result.getTasks.asScala.filter(_.getDesiredStatus!="STOPPED").length
     val result = client.describeClusters(new DescribeClustersRequest().withClusters(clusterName))
-    result.getClusters.asScala.head.getRunningTasksCount //we only asked for one cluster, so we should only get one.
+    result.getClusters.asScala.head.getRunningTasksCount + result.getClusters.asScala.head.getPendingTasksCount //we only asked for one cluster, so we should only get one.
   }
 
   def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {
@@ -45,7 +41,7 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
 
     val result = client.runTask(finalRq)
     val failures = result.getFailures.asScala
-    if(failures.length>1){
+    if(failures.nonEmpty){
       logger.error(s"Failed to launch task: ${failures.head.getArn} ${failures.head.getReason}")
       Failure(new RuntimeException(failures.head.toString))
     } else {
