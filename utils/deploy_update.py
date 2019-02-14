@@ -14,7 +14,7 @@ upload_path_selector = ["archivehunter-proxyrequest-lambda","archivehunter-trans
 regional_buckets = {
     "eu-west-1": "gnm-multimedia-rr-deployables",
     "us-east-1": "gnm-multimedia-use1-deployables",
-    "ap-south-1": "gnm-multimedia-aps1-deployables"
+    "ap-southeast-2": "gnm-multimedia-aps1-deployables"
 }
 
 
