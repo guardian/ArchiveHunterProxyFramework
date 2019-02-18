@@ -84,6 +84,34 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
 
   def getInputUri(plConfig:Pipeline,inputPath:String) = s"s3://${plConfig.getInputBucket}/$inputPath"
 
+  def withOutputUri(msg:AwsElasticTranscodeMsg, jobId:String, maybeProxyType:Option[ProxyType.Value])(block:String=>Option[MainAppReply]) = {
+    val maybeOutputPath = msg.outputs.flatMap(outList =>
+      outList.headOption.map(out => out.key)
+    )
+    maybeOutputPath match {
+      case Some(outputPath) =>
+        getPipelineConfig(msg.pipelineId) match {
+          case Success(None) =>
+            println(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?")
+            Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE, None, jobId, "", Some(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?"), maybeProxyType, None))
+          case Success(Some(plConfig)) =>
+            val outputUri = getOutputUri(plConfig, outputPath)
+            block(outputUri)
+          case Failure(err) =>
+            checkETSShouldFloodqueue(err) match {
+              case true =>
+                sendToFloodQueue(getSqsClient, msg, getFloodQueue)
+                None
+              case false =>
+                throw err
+            }
+        }
+      case None =>
+        println("ERROR: Success message with no outputs? This shouldn't happen.")
+        None
+    }
+  }
+
   def processMessage(msg:AwsElasticTranscodeMsg, replyTopic:String) = {
     val maybeProxyType = msg.userMetadata.flatMap(_.get("proxy-type").map(s=>ProxyType.withName(s)))
     if(maybeProxyType.isEmpty) println("WARNING: No proxy-type field for this job.")
@@ -93,40 +121,24 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
         Left("No Archivehunter job ID in the metadata! this shouldn't happen.")
       case Some(jobId)=>
         val maybeReplyMsg = msg.state match {
-          case TranscoderState.PROGRESSING=>
-            Some(MainAppReply.withPlainLog(JobReportStatus.RUNNING,None,jobId,"",None,maybeProxyType,None))
-          case TranscoderState.COMPLETED=>
-            val maybeOutputPath = msg.outputs.flatMap(outList=>
-              outList.headOption.map(out=>out.key)
-            )
-            maybeOutputPath match {
-              case Some(outputPath)=>
-                getPipelineConfig(msg.pipelineId) match {
-                  case Success(None)=>
-                    println(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?")
-                    Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,jobId,"",Some(s"ERROR: pipeline ${msg.pipelineId} could not be found. Has it been deleted?"), maybeProxyType, None))
-                  case Success(Some(plConfig))=>
-                    val outputUri = getOutputUri(plConfig, outputPath)
-                    Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS,Some(outputUri),jobId,"",msg.messageDetails, maybeProxyType, None))
-                  case Failure(err)=>
-                    checkETSShouldFloodqueue(err) match {
-                      case true=>
-                        sendToFloodQueue(getSqsClient, msg, getFloodQueue)
-                        None
-                      case false=>
-                        throw err
-                    }
-                }
-              case None=>
-                println("ERROR: Success message with no outputs? This shouldn't happen.")
-                None
+          case TranscoderState.PROGRESSING =>
+            Some(MainAppReply.withPlainLog(JobReportStatus.RUNNING, None, jobId, "", None, maybeProxyType, None))
+          case TranscoderState.COMPLETED =>
+            withOutputUri(msg, jobId, maybeProxyType) { outputUri =>
+              Some(MainAppReply.withPlainLog(JobReportStatus.SUCCESS, Some(outputUri), jobId, "", msg.messageDetails, maybeProxyType, None))
             }
-          case TranscoderState.ERROR=>
-            Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE,None,jobId,"",msg.messageDetails,maybeProxyType,None))
-          case TranscoderState.WARNING=>
-            Some(MainAppReply.withPlainLog(JobReportStatus.WARNING,None,jobId,"",msg.messageDetails,maybeProxyType,None))
+          case TranscoderState.ERROR =>
+            if (msg.errorCode.contains(3002)) {
+              //3002 => output file already exists. Send a warning message with the output field set.
+              withOutputUri(msg, jobId, maybeProxyType) { outputUri =>
+                Some(MainAppReply.withPlainLog(JobReportStatus.WARNING, Some(outputUri), jobId, "", msg.messageDetails, maybeProxyType, None))
+              }
+            } else {
+              Some(MainAppReply.withPlainLog(JobReportStatus.FAILURE, None, jobId, "", msg.messageDetails, maybeProxyType, None))
+            }
+          case TranscoderState.WARNING =>
+            Some(MainAppReply.withPlainLog(JobReportStatus.WARNING, None, jobId, "", msg.messageDetails, maybeProxyType, None))
         }
-
         maybeReplyMsg match {
           case Some(replyMsg) =>
             try {
