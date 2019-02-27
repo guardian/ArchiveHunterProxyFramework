@@ -76,6 +76,30 @@ class ReplyLambdaMainSpec extends Specification with Mockito with RequestModelEn
       result must beRight("message-id")
     }
 
+    "detect 'file already exists' error and send a WARNING message with the output path" in {
+      val mockedSnsClient = mock[AmazonSNSAsync]
+      mockedSnsClient.publish(any[PublishRequest]) returns new PublishResult().withMessageId("message-id")
+      val userMeta = Map(
+        "archivehunter-job-id"->"jobuuid",
+        "proxy-type"->"VIDEO"
+      )
+
+      val expectedOutput = ETSOutput("output-id","preset-id","ERROR",Some(100L),Some(123456L),Some(1920),Some(1080),"outfile.mp4")
+      val fakeMsg = AwsElasticTranscodeMsg(TranscoderState.ERROR,"job-id","pipeline-id",None,Some(3002),Some("supacalfragelisticexpialedocious"),Some(userMeta),Some(Seq(expectedOutput)))
+      val main = new ReplyLambdaMain {
+        override val snsClient: AmazonSNSAsync = mockedSnsClient
+        override def getReplyTopic: String = "fake-reply-topic"
+
+        override def withOutputUri(msg: AwsElasticTranscodeMsg, jobId: String, maybeProxyType: Option[ProxyType.Value])(block: String => Option[MainAppReply]): Option[MainAppReply] = block("s3://proxybucket/outputfile.mp4")
+      }
+
+      val result = main.processMessage(fakeMsg,"reply-topic")
+      val expectedOutputMsg = MainAppReply(JobReportStatus.WARNING,Some("s3://proxybucket/outputfile.mp4"),"jobuuid","",Some("c3VwYWNhbGZyYWdlbGlzdGljZXhwaWFsZWRvY2lvdXM="),Some(ProxyType.VIDEO),None)
+      val expectedPublishRequest = new PublishRequest().withTopicArn("reply-topic").withMessage(expectedOutputMsg.asJson.toString)
+      there was one(mockedSnsClient).publish(expectedPublishRequest)
+      result must beRight("message-id")
+    }
+
     "send a 'success' message to SNS for a COMPLETED state, including the output path" in {
       val mockedSnsClient = mock[AmazonSNSAsync]
       mockedSnsClient.publish(any[PublishRequest]) returns new PublishResult().withMessageId("message-id")
