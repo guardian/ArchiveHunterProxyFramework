@@ -598,6 +598,143 @@ Resources:
         - Key: Stage
           Value: !Ref Stage
 
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}_basic_monitoring
+      DashboardBody:
+        Fn::Sub: |
+          {
+            "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                [
+                  "AWS/Lambda",
+                  "Invocations",
+                  "FunctionName",
+                  "${RequestLambda}"
+                ],
+                [
+                  ".",
+                  "Throttles",
+                  ".",
+                  "."
+                ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Request Lambda"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                [
+                  "AWS/Lambda",
+                  "Throttles",
+                  "FunctionName",
+                  "${TranscoderReplyLambda}"
+                ],
+                [
+                  ".",
+                  "Errors",
+                  ".",
+                  "."
+                ],
+                [
+                  ".",
+                  "Invocations",
+                  ".",
+                  "."
+                ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Transcoder Reply Lambda"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 15,
+              "y": 0,
+              "width": 9,
+              "height": 6,
+              "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                [
+                  "AWS/SQS",
+                  "ApproximateNumberOfMessagesNotVisible",
+                  "QueueName",
+                  "${FloodQueue.QueueName}"
+                ],
+                [
+                  ".",
+                  "ApproximateNumberOfMessagesVisible",
+                  ".",
+                  "."
+                ],
+                [
+                  ".",
+                  "ApproximateNumberOfMessagesDelayed",
+                  ".",
+                  "."
+                ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Flood Queue"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 15,
+              "y": 6,
+              "width": 9,
+              "height": 6,
+              "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                [
+                  "AWS/SQS",
+                  "ApproximateNumberOfMessagesNotVisible",
+                  "QueueName",
+                  "${TranscoderReplyFloodQueue.QueueName}"
+                ],
+                [
+                  ".",
+                  "ApproximateNumberOfMessagesVisible",
+                  ".",
+                  "."
+                ],
+                [
+                  ".",
+                  "ApproximateNumberOfMessagesDelayed",
+                  ".",
+                  "."
+                ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "Transcoder reply Flood Queue"
+              }
+            }
+            ]
+          }
+
 Outputs:
   InputTopic:
     Description: SNS topic that triggers actions
