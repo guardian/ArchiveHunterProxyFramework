@@ -100,6 +100,7 @@ class ReplyLambdaMain extends RequestHandler[SNSEvent, Unit] with TranscoderMess
           case Failure(err) =>
             checkETSShouldFloodqueue(err) match {
               case true =>
+                println(s"WARNING: ${err.toString}")
                 sendToFloodQueue(getSqsClient, msg, getFloodQueue)
                 None
               case false =>
