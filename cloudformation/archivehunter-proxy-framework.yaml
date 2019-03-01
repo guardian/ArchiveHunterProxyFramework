@@ -624,6 +624,12 @@ Resources:
                 ],
                 [
                   ".",
+                  "Errors",
+                  ".",
+                  "."
+                ],
+                [
+                  ".",
                   "Throttles",
                   ".",
                   "."
@@ -645,7 +651,7 @@ Resources:
                 "metrics": [
                 [
                   "AWS/Lambda",
-                  "Throttles",
+                  "Invocations",
                   "FunctionName",
                   "${TranscoderReplyLambda}"
                 ],
@@ -657,7 +663,7 @@ Resources:
                 ],
                 [
                   ".",
-                  "Invocations",
+                  "Throttles",
                   ".",
                   "."
                 ]
