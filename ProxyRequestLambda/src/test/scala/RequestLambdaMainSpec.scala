@@ -9,6 +9,7 @@ import com.amazonaws.services.sns.AmazonSNS
 import com.amazonaws.services.sns.model.{PublishRequest, PublishResult}
 import com.amazonaws.services.sqs.AmazonSQS
 import com.amazonaws.services.sqs.model.SendMessageResult
+import com.amazonaws.services.elastictranscoder.model.ResourceNotFoundException
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import io.circe.syntax._
@@ -226,6 +227,44 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       there was one(mockedSnsClient).publish(any[PublishRequest])
       there was no(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-proxy-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
       result must beLeft("java.lang.RuntimeException: No pipeline available to process this media")
+    }
+
+    "log a failure if ETS CreateJob raises an exception" in {
+      val mockedPipeline = mock[Pipeline]
+      mockedPipeline.getId returns "fake-pipeline-id"
+
+      val mockedPipelineManager = mock[ETSPipelineManager]
+      mockedPipelineManager.findPipelineFor(any,any)(any) returns Success(Seq(mockedPipeline))
+      mockedPipelineManager.makeJobRequest(any,any,any,any,any,any)(any) throws new ResourceNotFoundException("boo")
+      val mockedTaskMgr = mock[ContainerTaskManager]
+      val mockedEcsClient = mock[AmazonECS]
+      val mockedEtsClient = mock[AmazonElasticTranscoder]
+      val mockedSettings = mock[Settings]
+      mockedSettings.videoPresetId returns "video-preset-id"
+      mockedSettings.audioPresetId returns "audio-preset-id"
+
+      val mockedSNSClient = mock[AmazonSNS]
+      mockedSNSClient.publish(any) returns new PublishResult().withMessageId("fake-message-id")
+
+      val fakeRequest = RequestModel(RequestType.PROXY, "s3://mediabucket/fake-media-uri","proxybucket","fake-job-id",None,None,Some(ProxyType.VIDEO))
+      val toTest = new RequestLambdaMain {
+        override def getEcsClient: AmazonECS = mockedEcsClient
+
+        override def getEtsClient: AmazonElasticTranscoder = mockedEtsClient
+
+        override def getSnsClient: AmazonSNS = mockedSNSClient
+
+        override def getSqsClient: AmazonSQS = mock[AmazonSQS]
+
+        override val etsPipelineManager: ETSPipelineManager = mockedPipelineManager
+      }
+
+      val result = Await.result(toTest.processRequest(fakeRequest, mockedSettings, mockedTaskMgr), 5 seconds)
+      there was one(mockedPipelineManager).findPipelineFor("mediabucket","proxybucket")(mockedEtsClient)
+      there was no(mockedPipelineManager).createEtsPipeline(any,any)(any)
+      there was one(mockedPipelineManager).makeJobRequest("fake-media-uri","fake-media-uri","video-preset-id","fake-pipeline-id","fake-job-id",ProxyType.VIDEO)(mockedEtsClient)
+      there was one(mockedSNSClient).publish(any)
+      result must beLeft
     }
   }
 

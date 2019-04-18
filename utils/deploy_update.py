@@ -4,6 +4,7 @@ import boto3
 import os.path
 import argparse
 from functools import reduce
+from datetime import datetime
 
 refs_to_find = ["RequestLambda","TranscoderReplyLambda", "SweeperLambda"]
 jars_for_ref = ["ProxyRequestLambda/target/scala-2.12/proxyRequestLambda.jar",
@@ -57,6 +58,7 @@ def publish_version(function_name, bucket_name, bucket_path):
         S3Key=bucket_path,
         Publish=True
     )
+    #lambda_client.tag_resource(Resource=function_name, Tags={'Updated': datetime.now().strftime("%Y%m%d%H%M")})
 
 
 def locate_functions(stack_name):

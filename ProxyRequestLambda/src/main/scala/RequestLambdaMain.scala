@@ -52,6 +52,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
 
   /**
     * should the given ETS error be sent to the flood queue?
+    * currently, we only push to the flood queue if we receive a ThrottlingException.
     * @param err AmazonElasticTranscoderException that occurred
     * @return a boolean indicating whether to go to flood queue or not.
     */
