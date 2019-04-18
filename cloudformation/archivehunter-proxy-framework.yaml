@@ -208,6 +208,7 @@ Resources:
           VIDEO_PRESET_ID: !Ref VideoTranscodingPresetId
           AUDIO_PRESET_ID: !Ref AudioTranscodingPresetId
           FLOOD_QUEUE: !Ref FloodQueue
+          MAX_RUNNING_TASKS: 20
       Handler: RequestLambdaMain
       FunctionName: !Sub archivehunter-requestlambda-${Stage}
       MemorySize: 768
