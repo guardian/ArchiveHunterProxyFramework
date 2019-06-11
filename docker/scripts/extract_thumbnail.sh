@@ -43,6 +43,11 @@ elif [[ "$MIMETYPE" =~ ^video.* ]]; then
     mv /tmp/mediafile /tmp/videofile
     extract_video_thumbnail.sh "$1" "$2" "$3" "$4"
     exit $?
+elif [[ "$MIMETYPE" =~ ^image/x-canon-cr2.* ]] || [[ "$MIMETYPE" =~ ^image/tiff.* ]]; then
+    echo Got camera raw image file
+    mv /tmp/mediafile /tmp/imagefile
+    extract_raw_thumbnail.sh "$1" "$2" "$3" "$4"
+    exit $?
 elif [[ "$MIMETYPE" =~ ^image.* ]]; then
     echo Got image file
     mv /tmp/mediafile /tmp/imagefile
