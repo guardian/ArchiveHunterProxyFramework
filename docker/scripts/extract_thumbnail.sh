@@ -33,6 +33,10 @@ fi
 
 MIMETYPE=$(file -b --mime-type /tmp/mediafile)
 
+LASTFOUR="${1: -4}"
+declare -l LASTFOUR
+LASTFOUR=$LASTFOUR
+
 if [[ "$MIMETYPE" =~ ^audio.* ]]; then
     echo Got audio file
     mv /tmp/mediafile /tmp/audiofile
@@ -43,7 +47,7 @@ elif [[ "$MIMETYPE" =~ ^video.* ]]; then
     mv /tmp/mediafile /tmp/videofile
     extract_video_thumbnail.sh "$1" "$2" "$3" "$4"
     exit $?
-elif [[ "$MIMETYPE" =~ ^image/x-canon-cr2.* ]] || [[ "$MIMETYPE" =~ ^image/tiff.* ]]; then
+elif [[ "$MIMETYPE" =~ ^image/x-canon-cr2.* ]] || [[ ( "$LASTFOUR" == ".nef" ) && ( "$MIMETYPE" =~ ^image/tiff.* ) ]]; then
     echo Got camera raw image file
     mv /tmp/mediafile /tmp/imagefile
     extract_raw_thumbnail.sh "$1" "$2" "$3" "$4"
