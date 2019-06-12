@@ -16,5 +16,6 @@ RUN chmod a+x /usr/local/bin/extract_*.sh
 COPY docker_install.sh /root
 RUN chmod a+x /root/docker_install.sh
 RUN /root/docker_install.sh
+RUN chmod a+x /usr/local/bin/dcraw
 RUN useradd proxy
 USER proxy
