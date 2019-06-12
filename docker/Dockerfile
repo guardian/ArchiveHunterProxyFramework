@@ -13,14 +13,8 @@ COPY scripts/analyze_media_file.py /usr/local/bin/analyze_media_file.py
 COPY scripts/audio.gpi /usr/local/share/thumbnailer/audio.gpi
 COPY scripts/extract_thumbnail.sh /usr/local/bin/extract_thumbnail.sh
 RUN chmod a+x /usr/local/bin/extract_*.sh
-RUN yum -y groupinstall 'Development Tools'
-RUN yum -y install jasper-devel libjpeg-devel liblcms2-devel
-RUN yum -y install lcms2-devel
-RUN yum -y install wget
-RUN wget http://www.cybercom.net/%7Edcoffin/dcraw/archive/dcraw-9.28.0.tar.gz
-RUN tar xvzf dcraw-9.28.0.tar.gz
-WORKDIR "/dcraw"
-RUN bash ./install
-RUN gcc -o dcraw -O4 dcraw.c -lm -ljasper -ljpeg -llcms2
+COPY docker_install.sh /root
+RUN chmod a+x /root/docker_install.sh
+RUN /root/docker_install.sh
 RUN useradd proxy
 USER proxy
