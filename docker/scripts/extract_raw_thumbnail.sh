@@ -1,7 +1,8 @@
 #!/bin/bash
 
 echo Converting and shrinking image...
-/usr/local/bin/dcraw -c /tmp/imagefile | convert - -resize 640x360 -define modulate:colorspace=HSB -modulate 106,90,96\> /tmp/resized.jpg > /tmp/logfile 2>&1
+/usr/local/bin/dcraw -T /tmp/imagefile
+convert /tmp/imagefile.tiff -resize 640x360 -define modulate:colorspace=HSB -modulate 106,90,96\> /tmp/resized.jpg > /tmp/logfile 2>&1
 CONVERT_EXIT=$?
 cat /tmp/logfile
 
