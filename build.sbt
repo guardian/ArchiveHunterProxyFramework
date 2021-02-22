@@ -1,6 +1,7 @@
-val awsSdkVersion = "1.11.346"
-val circeVersion = "0.9.3"
+val awsSdkVersion = "1.11.959"
+val circeVersion = "0.13.0"
 val specs2Version = "4.3.2"
+val jacksonDatabindVersion = "2.9.10.8"
 
 enablePlugins(RiffRaffArtifact)
 
@@ -16,7 +17,6 @@ lazy val common = (project in file("common"))
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "io.circe" %% "circe-java8" % circeVersion,
     )
   )
 
@@ -30,10 +30,10 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       "com.amazonaws" % "aws-java-sdk-sns"% awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-ecs" % awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-elastictranscoder" % awsSdkVersion,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonDatabindVersion,
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "io.circe" %% "circe-java8" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
       "com.amazonaws" % "aws-lambda-java-log4j2" % "1.0.0",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
@@ -61,10 +61,10 @@ lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
       "com.amazonaws" % "aws-lambda-java-core" % "1.0.0",
       "com.amazonaws" % "aws-java-sdk-elastictranscoder" % awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-sns" % awsSdkVersion,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonDatabindVersion,
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "io.circe" %% "circe-java8" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
       "com.amazonaws" % "aws-lambda-java-log4j2" % "1.0.0",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
@@ -92,6 +92,7 @@ lazy val `sweeperLambda` = (project in file("SweeperLambda"))
       "com.amazonaws" % "aws-lambda-java-core" % "1.0.0",
       "com.amazonaws" % "aws-java-sdk-sns" % awsSdkVersion,
       "com.amazonaws" % "aws-java-sdk-sqs" % awsSdkVersion,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonDatabindVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
       "com.amazonaws" % "aws-lambda-java-log4j2" % "1.0.0",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
@@ -121,11 +122,13 @@ lazy val `ecsAlertLambda` = (project in file("ECSAlertLambda"))
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "io.circe" %% "circe-java8" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
-      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.0.0",
+      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.1.1",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
-      "org.specs2" %% "specs2-mock" % specs2Version % "test"
+      "org.specs2" %% "specs2-mock" % specs2Version % "test",
+      //fixes for vulnerable dependencies
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonDatabindVersion,
+      "commons-codec" % "commons-codec" % "1.13",
     ),
     assemblyJarName in assembly := "ecsAlertLambda.jar",
     assemblyMergeStrategy in assembly := {
