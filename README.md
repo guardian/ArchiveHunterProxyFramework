@@ -110,11 +110,15 @@ and the code hosting bucket.
 as per the Cloudformation template.  
    - A script is provided under the `utils/` directory to do
    this quickly.  It requires Python3 to be installed, along with boto3 for AWS communication
-   (if you have the AWS CLI you should have both of these).
+   (if you have the AWS CLI you should have both of these; if not, `pip3 install boto3` or 
+     `pip3 install awscli` should sort you out).
    - You'll need to update the `regional_buckets` map near the top of the script to be the
     same as in the Cloudformation in step 1.
    - Remember to use the `--initial` option the first time you upload, otherwise the script will fail
     when it tries to update lambda functions that do not exist yet.
+   - The setup expects the "stack" and "stage" parameters in the lambda tags to match the ones in the cloudformation.
+     When using "--initial" you should specify `--stackparam` and `--stageparam` in the script to match how you'll deploy
+     the cloudformation (check section 4 for details on these parameters)
    - Run the script with `--help` (or read the source) for details of the other commandline options
 
 ### 3. Build/upload the metadata extraction Docker image (OPTIONAL)
@@ -138,8 +142,10 @@ $ docker build . -t {your-org}/archivehunter-proxying:{version}
 $ docker push {your-org}/archivehunter-proxying:{version}
 ```
 
-where `{your-org}` is the name of the Docker Hub account to push to and 
-`{version}` is your own version specifier (if you don't know what this means,
+where `{your-org}` is either:
+  - the name of the Docker Hub account to push to
+  - OR the ECR repository ID (e.g. `{account-id}.dkr.ecr.{region}.amazonaws.com/archivehunter`) if you are pushing to ECR
+and `{version}` is your own version specifier (if you don't know what this means,
 uee "1" without the quotes)
 
 
@@ -149,7 +155,9 @@ Take the CloudFormation template that you updated in step 2 and deploy it
 via the AWS console to the region you want to work in.  You'll need
 to specify some parameters when you do this:
 
-- App, Stack and Stage - You can accept the defaults here. Stages are:
+- App, Stack and Stage - You can accept the defaults here. Stack and stage are just labels to help when organising your 
+  AWS account.
+  Stages are:
    - CODE: environment under active development
    - DEV: environment for testing before deployment
    - PROD: the "real" environment that users are working in
