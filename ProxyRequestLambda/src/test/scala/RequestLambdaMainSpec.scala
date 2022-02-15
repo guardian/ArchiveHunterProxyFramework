@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 class RequestLambdaMainSpec extends Specification with Mockito with RequestModelEncoder {
   "RequestLambdaMain.checkETSShouldFloodqueue" should {
     "return true if the error is an ETS error indicating throttling exception" in {
-      val mockedTaskMgr = mock[ContainerTaskManager]
       val mockedEcsClient = mock[AmazonECS]
       val mockedSettings = mock[Settings]
 
@@ -81,7 +80,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
       val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
-      mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
+      mockedTaskMgr.runTask(any,any,any,any, any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
@@ -92,7 +91,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
-      there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
+      there was one(mockedTaskMgr).runTask(any,any,any,any, any)(any)
       result must beRight("fake-task-arn")
     }
 
@@ -102,7 +101,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
       val fakeRequest = RequestModel(RequestType.THUMBNAIL,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
-      mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
+      mockedTaskMgr.runTask(any,any,any,any, any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
@@ -113,7 +112,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
-      there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
+      there was one(mockedTaskMgr).runTask(any,any,any,any,any)(any)
       result must beLeft("java.lang.RuntimeException: My hovercraft is full of eels")
     }
 
@@ -123,7 +122,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
       val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","","fake-job-id",None,None,None)
-      mockedTaskMgr.runTask(any,any,any,any)(any) returns Success(fakeJobDesc)
+      mockedTaskMgr.runTask(any,any,any,any,any)(any) returns Success(fakeJobDesc)
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
@@ -134,7 +133,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
-      there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
+      there was one(mockedTaskMgr).runTask(any,any,any,any,any)(any)
       result must beRight("fake-task-arn")
     }
 
@@ -144,7 +143,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       val mockedSettings = mock[Settings]
       val fakeJobDesc = new Task().withTaskArn("fake-task-arn")
       val fakeRequest = RequestModel(RequestType.ANALYSE,"s3://fake-media-uri","fake-target-location","fake-job-id",None,None,None)
-      mockedTaskMgr.runTask(any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
+      mockedTaskMgr.runTask(any,any,any,any,any)(any) returns Failure(new RuntimeException("My hovercraft is full of eels"))
 
       val toTest = new RequestLambdaMain {
         override def getEcsClient: AmazonECS = mockedEcsClient
@@ -156,7 +155,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       }
       val result = Await.result(toTest.processRequest(fakeRequest,mockedSettings,mockedTaskMgr), 5 seconds)
 
-      there was one(mockedTaskMgr).runTask(any,any,any,any)(any)
+      there was one(mockedTaskMgr).runTask(any,any,any,any,any)(any)
       result must beLeft("java.lang.RuntimeException: My hovercraft is full of eels")
     }
 
@@ -279,7 +278,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       )
       val evt = new SNSEvent().withRecords(recods.asJava)
 
-      val mockProcessRecord = mock[Function3[RequestModel,Settings,ContainerTaskManager,Future[Either[String,String]]]]
+      val mockProcessRecord = mock[(RequestModel, Settings, ContainerTaskManager) => Future[Either[String, String]]]
       mockProcessRecord.apply(any,any,any) returns Future(Right("mock was called"))
 
       val toTest = new RequestLambdaMain {
@@ -289,7 +288,7 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
         override def getSqsClient: AmazonSQS = mock[AmazonSQS]
 
-        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50)
+        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50, None)
 
         override def processRequest(model: RequestModel, settings:Settings, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, settings, taskMgr)
 
@@ -309,10 +308,10 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
       )
       val evt = new SNSEvent().withRecords(recods.asJava)
 
-      val mockProcessRecord = mock[Function3[RequestModel,Settings,ContainerTaskManager,Future[Either[String,String]]]]
+      val mockProcessRecord = mock[(RequestModel, Settings, ContainerTaskManager) => Future[Either[String, String]]]
       mockProcessRecord.apply(any,any,any) returns Future(Right("mock was called"))
 
-      val mockSendToFloodQueue = mock[Function3[AmazonSQS, RequestModel, String, Try[SendMessageResult]]]
+      val mockSendToFloodQueue = mock[(AmazonSQS, RequestModel, String) => Try[SendMessageResult]]
       mockSendToFloodQueue.apply(any, any, any).returns(Success(new SendMessageResult().withMessageId("fake-id")))
 
       val toTest = new RequestLambdaMain {
@@ -322,12 +321,12 @@ class RequestLambdaMainSpec extends Specification with Mockito with RequestModel
 
         override def getSqsClient: AmazonSQS = mock[AmazonSQS]
 
-        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50)
+        override def getSettings: Settings = Settings("fake-cluster-name","fake-task-def","fake-container-name",None,"fake-reply-topic","fake-role-arn","fake-topic","vpreset","apreset","floodQueue",50, None)
 
         override def processRequest(model: RequestModel, settings:Settings, taskMgr: ContainerTaskManager): Future[Either[String, String]] = mockProcessRecord(model, settings, taskMgr)
 
         override def sendToFloodQueue(sqsClient: AmazonSQS, rq: RequestModel, floodQueue: String): Try[SendMessageResult] = mockSendToFloodQueue(sqsClient, rq, floodQueue)
-        val mockCheckCapacity = mock[Function3[RequestModel, Settings,ContainerTaskManager, Boolean]]
+        val mockCheckCapacity = mock[(RequestModel, Settings, ContainerTaskManager) => Boolean]
         mockCheckCapacity.apply(any, any, any).returns(true, true, false)
         override def checkEcsCapacity(model: RequestModel, settings: Settings, taskMgr: ContainerTaskManager): Boolean = mockCheckCapacity(model, settings, taskMgr)
       }
