@@ -1,6 +1,5 @@
 import java.net.URLDecoder
-
-import com.amazonaws.services.ecs.model.AmazonECSException
+import com.amazonaws.services.ecs.model.{AmazonECSException, LaunchType}
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
 import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
 import com.amazonaws.services.elastictranscoder.model._
@@ -372,7 +371,8 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         case Some(str)=>str
         case None=>throw new RuntimeException("You need to specify FLOOD_QUEUE")
       },
-      sys.env.get("MAX_RUNNING_TASKS").map(_.toInt).getOrElse(50)
+      sys.env.get("MAX_RUNNING_TASKS").map(_.toInt).getOrElse(50),
+      sys.env.get("LAUNCH_TYPE_OVERRIDE").map(LaunchType.fromValue)
     )
   }
 

@@ -13,7 +13,7 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
     result.getClusters.asScala.head.getRunningTasksCount + result.getClusters.asScala.head.getPendingTasksCount //we only asked for one cluster, so we should only get one.
   }
 
-  def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {
+  def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None, launchType:Option[LaunchType]=None)(implicit client:AmazonECS) = {
 
     val actualCpu = cpu.getOrElse(1)
     val actualEnvironment = environment.map(entry=>new KeyValuePair().withName(entry._1).withValue(entry._2)).asJavaCollection
@@ -32,7 +32,7 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
       .withCluster(clusterName)
       .withTaskDefinition(taskDefinitionName)
       .withOverrides(overrides)
-      .withLaunchType(LaunchType.FARGATE)
+      .withLaunchType(launchType.getOrElse(LaunchType.FARGATE))
 
       val finalRq = netConfig match {
         case Some(config)=>rq.withNetworkConfiguration(config)
