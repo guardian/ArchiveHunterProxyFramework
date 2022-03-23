@@ -1,6 +1,5 @@
 import java.net.URLDecoder
-
-import com.amazonaws.services.ecs.model.AmazonECSException
+import com.amazonaws.services.ecs.model.{AmazonECSException, LaunchType}
 import com.amazonaws.services.ecs.{AmazonECS, AmazonECSClientBuilder}
 import com.amazonaws.services.elastictranscoder.{AmazonElasticTranscoder, AmazonElasticTranscoderClientBuilder}
 import com.amazonaws.services.elastictranscoder.model._
@@ -122,7 +121,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
   protected def checkTaskCount(taskMgr:ContainerTaskManager, settings:Settings) = taskMgr.getPendingTaskCount match {
     case Success(count)=>
       println(s"Got $count running tasks")
-      if(count>settings.maxRunningTasks){
+      if(count>=settings.maxRunningTasks){
         println(s"Limiting to ${settings.maxRunningTasks}, sending to flood queue")
         false
       } else {
@@ -204,9 +203,10 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
       case RequestType.THUMBNAIL=>
         taskMgr.runTask(
           command = Seq("/bin/bash","/usr/local/bin/extract_thumbnail.sh", URLDecoder.decode(model.inputMediaUri, "UTF-8"), URLDecoder.decode(model.targetLocation,"UTF-8"), settings.replyTopic, model.jobId),
-          environment = Map(),
-          name = s"extract_thumbnail_${model.jobId.toString}",
-          cpu = None
+          environment = settings.updateEnvironmentWithRegion(Map()),
+          name = s"extract_thumbnail_${model.jobId}",
+          cpu = None,
+          launchType = settings.launchType
         ) match {
           case Success(task)=>
             println(s"Successfully launched task: ${task.getTaskArn}")
@@ -218,10 +218,11 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
 
       case RequestType.ANALYSE=>
         taskMgr.runTask(
-          command = Seq("/usr/bin/python","/usr/local/bin/analyze_media_file.py", URLDecoder.decode(model.inputMediaUri, "UTF-8"), settings.replyTopic, model.jobId),
-          environment = Map(),
-          name = s"analyze_media_${model.jobId.toString}",
-          cpu = None
+          command = Seq("/usr/bin/python3","/usr/local/bin/analyze_media_file.py", URLDecoder.decode(model.inputMediaUri, "UTF-8"), settings.replyTopic, model.jobId),
+          environment = settings.updateEnvironmentWithRegion(Map()),
+          name = s"analyze_media_${model.jobId}",
+          cpu = None,
+          launchType = settings.launchType
         ) match {
           case Success(task)=>
             println(s"Successfully launched task: ${task.getTaskArn}")
@@ -372,7 +373,8 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         case Some(str)=>str
         case None=>throw new RuntimeException("You need to specify FLOOD_QUEUE")
       },
-      sys.env.get("MAX_RUNNING_TASKS").map(_.toInt).getOrElse(50)
+      sys.env.get("MAX_RUNNING_TASKS").map(_.toInt).getOrElse(50),
+      sys.env.get("LAUNCH_TYPE_OVERRIDE").map(LaunchType.fromValue)
     )
   }
 

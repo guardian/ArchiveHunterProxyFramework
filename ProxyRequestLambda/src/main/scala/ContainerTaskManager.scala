@@ -13,43 +13,54 @@ class ContainerTaskManager (clusterName:String,taskDefinitionName:String,taskCon
     result.getClusters.asScala.head.getRunningTasksCount + result.getClusters.asScala.head.getPendingTasksCount //we only asked for one cluster, so we should only get one.
   }
 
-  def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None)(implicit client:AmazonECS) = {
-
-    val actualCpu = cpu.getOrElse(1)
+  def runTask(command:Seq[String], environment:Map[String,String], name:String, cpu:Option[Int]=None, launchType:Option[LaunchType]=None)(implicit client:AmazonECS) = {
+    val launchTypeToUse = launchType.getOrElse(LaunchType.FARGATE)
     val actualEnvironment = environment.map(entry=>new KeyValuePair().withName(entry._1).withValue(entry._2)).asJavaCollection
 
-    val overrides = new TaskOverride().withContainerOverrides(new ContainerOverride()
+    val baseOverrides = new TaskOverride().withContainerOverrides(new ContainerOverride()
       .withCommand(command.asJava)
-      .withCpu(actualCpu)
       .withEnvironment(actualEnvironment)
       .withName(taskContainerName)
     )
 
-    //external IP is needed to pull images from Docker Hub
-    val netConfig = subnets.map(subnetList=>new NetworkConfiguration().withAwsvpcConfiguration(new AwsVpcConfiguration().withSubnets(subnetList.asJava).withAssignPublicIp(AssignPublicIp.ENABLED)))
+    val overrides = cpu match {
+      case Some(cpu)=> baseOverrides.withCpu(cpu.toString)
+      case None=> baseOverrides
+    }
+
+    //external IP is needed to pull images from Docker Hub in Fargate
+    val netConfig = launchTypeToUse match {
+      case LaunchType.FARGATE=> subnets.map(subnetList=>new NetworkConfiguration().withAwsvpcConfiguration(new AwsVpcConfiguration().withSubnets(subnetList.asJava).withAssignPublicIp(AssignPublicIp.ENABLED)))
+      case LaunchType.EC2=> subnets.map(subnetList=>new NetworkConfiguration().withAwsvpcConfiguration(new AwsVpcConfiguration().withSubnets(subnetList.asJava)))
+    }
 
     val rq = new RunTaskRequest()
       .withCluster(clusterName)
       .withTaskDefinition(taskDefinitionName)
       .withOverrides(overrides)
-      .withLaunchType(LaunchType.FARGATE)
+      .withLaunchType(launchTypeToUse)
 
       val finalRq = netConfig match {
         case Some(config)=>rq.withNetworkConfiguration(config)
         case None=>rq
       }
 
-    val result = client.runTask(finalRq)
-    val failures = result.getFailures.asScala
-    if(failures.nonEmpty){
-      logger.error(s"Failed to launch task: ${failures.head.getArn} ${failures.head.getReason}")
-      Failure(new RuntimeException(failures.head.toString))
-    } else {
-      if(result.getTasks.isEmpty){
-        Failure(new RuntimeException("No failures logged but no tasks started"))
-      } else {
-        Success(result.getTasks.asScala.head)
-      }
+    Try { client.runTask(finalRq) } match {
+      case Success(result) =>
+        val failures = result.getFailures.asScala
+        if (failures.nonEmpty) {
+          logger.error(s"Failed to launch task: ${failures.head.getArn} ${failures.head.getReason}")
+          Failure(new RuntimeException(failures.head.toString))
+        } else {
+          if (result.getTasks.isEmpty) {
+            Failure(new RuntimeException("No failures logged but no tasks started"))
+          } else {
+            Success(result.getTasks.asScala.head)
+          }
+        }
+      case Failure(err) =>
+        logger.error(s"Failed to launch task: ${err.getMessage}", err)
+        Failure(err)
     }
   }
 }
