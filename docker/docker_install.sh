@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 yum -y groupinstall 'Development Tools'
-yum -y install jasper-devel libjpeg-devel liblcms2-devel
+yum -y install jasper-devel libjpeg-devel
 yum -y install lcms2-devel
 yum -y install wget
 wget https://www.dechifro.org/dcraw/archive/dcraw-9.28.0.tar.gz

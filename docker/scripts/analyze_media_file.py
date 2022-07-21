@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #expects arguments:  analyze_media_file.py {s3-uri-of-source} {sns-topic-arn}
 
@@ -9,7 +9,7 @@ import boto3
 import time
 import traceback
 import subprocess
-from urlparse import urlparse
+from urllib.parse import urlparse
 import base64
 
 
@@ -26,7 +26,7 @@ def s3_download(uri, local_path):
     if uridata.path == "":
         raise ValueError("No path to download")
 
-    print "Downloading {0} from {1}".format(uridata.path.lstrip("/"),uridata.netloc)
+    print("Downloading {0} from {1}".format(uridata.path.lstrip("/"),uridata.netloc))
     svc = boto3.resource("s3")
     svc.Bucket(uridata.netloc).download_file(uridata.path.lstrip("/"), local_path)
 
@@ -41,19 +41,19 @@ def call_ffprobe(path):
 
     (stdout,stderr) = proc.communicate()
     if proc.returncode != 0:
-        print "FFprobe failed: "
-        print stderr
+        print("FFprobe failed: ")
+        print(stderr)
         report_error(callback_uri, stderr)
     else:
         return json.loads(stdout)   #an exception from this gets caught at root level
 
 
 def send_with_retry(callback_uri, content, attempt=0):
-    print content
+    print(content)
 
     result = requests.post(callback_uri, data=content, headers={'Content-Type': "application/json"})
     if result.status_code != 200:
-        print "WARNING: server returned {0}".format(result.status_code)
+        print("WARNING: server returned {0}".format(result.status_code))
         time.sleep(10)
         send_with_retry(callback_uri, content, attempt+1)
 
@@ -65,7 +65,7 @@ def send_sns(content, attempt=0):
     :param attempt: attempt number.  Don't set this when calling
     :return: message ID of send, or raises if send failed.
     """
-    print content
+    print(content)
 
     client = boto3.client("sns")
 
@@ -76,7 +76,7 @@ def send_sns(content, attempt=0):
         )
         return response['MessageId']
     except Exception as e:
-        print "ERROR: Could not send message: "
+        print("ERROR: Could not send message: ")
         traceback.print_exc()
         if(attempt<10):
             time.sleep(10)
@@ -108,7 +108,7 @@ def report_error(callback_uri, description, attempt=0):
         "jobId": job_id,
         "log": base64.b64encode(log)
     })
-    print "Logging error to server at {0}: {1}".format(callback_uri, content)
+    print("Logging error to server at {0}: {1}".format(callback_uri, content))
     send_sns(content)
 
 
@@ -118,9 +118,9 @@ callback_uri = sys.argv[2]
 job_id = sys.argv[3]
 
 try:
-    print "Downloading from {0}".format(download_uri)
-    print "Callback URI is {0}".format(callback_uri)
-    print "Job ID is {0}".format(job_id)
+    print("Downloading from {0}".format(download_uri))
+    print("Callback URI is {0}".format(callback_uri))
+    print("Job ID is {0}".format(job_id))
     s3_download(download_uri, "/tmp/mediafile")
     metadata = call_ffprobe("/tmp/mediafile")
     report_success(metadata)
