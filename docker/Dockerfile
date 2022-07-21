@@ -1,4 +1,4 @@
-FROM centos:7
+FROM centos:centos8
 
 RUN yum -y clean all && yum -y update && yum -y install epel-release \
     && rpm --import http://li.nux.ro/download/nux/RPM-GPG-KEY-nux.ro \
