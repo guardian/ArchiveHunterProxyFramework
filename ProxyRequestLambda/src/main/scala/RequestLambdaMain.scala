@@ -220,7 +220,7 @@ class RequestLambdaMain extends RequestHandler[SNSEvent,Unit] with RequestModelE
         taskMgr.runTask(
           command = Seq("/usr/bin/python3","/usr/local/bin/analyze_media_file.py", URLDecoder.decode(model.inputMediaUri, "UTF-8"), settings.replyTopic, model.jobId),
           environment = Map(),
-          name = s"analyze_media_${model.jobId.toString}",
+          name = s"analyze_media_${model.jobId}",
           cpu = None
         ) match {
           case Success(task)=>
