@@ -78,6 +78,7 @@ lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
       case "application.conf" => MergeStrategy.concat
       //META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
       case PathList("META-INF","org","apache","logging","log4j","core","config","plugins","Log4j2Plugins.dat") => MergeStrategy.last
+      case "module-info.class" => MergeStrategy.first
       case x=>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
@@ -106,6 +107,7 @@ lazy val `sweeperLambda` = (project in file("SweeperLambda"))
       case "application.conf" => MergeStrategy.concat
       //META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
       case PathList("META-INF","org","apache","logging","log4j","core","config","plugins","Log4j2Plugins.dat") => MergeStrategy.last
+      case "module-info.class" => MergeStrategy.first
       case x=>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
@@ -138,6 +140,7 @@ lazy val `ecsAlertLambda` = (project in file("ECSAlertLambda"))
       case "application.conf" => MergeStrategy.concat
       //META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
       case PathList("META-INF","org","apache","logging","log4j","core","config","plugins","Log4j2Plugins.dat") => MergeStrategy.last
+      case "module-info.class" => MergeStrategy.first
       case x=>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
