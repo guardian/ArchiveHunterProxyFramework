@@ -5,6 +5,11 @@ val jacksonDatabindVersion = "2.13.2.1"
 
 enablePlugins(RiffRaffArtifact)
 
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case x => MergeStrategy.first
+}
+
 lazy val root = (project in file("."))
   .settings(
     name := "ArchiveHunterProxyLambdas"
