@@ -1,7 +1,7 @@
 val awsSdkVersion = "1.12.278"
 val circeVersion = "0.13.0"
 val specs2Version = "4.3.2"
-val jacksonDatabindVersion = "2.12.6.1"
+val jacksonDatabindVersion = "2.13.2.1"
 
 enablePlugins(RiffRaffArtifact)
 
