@@ -1,7 +1,7 @@
-val awsSdkVersion = "1.11.959"
+val awsSdkVersion = "1.12.278"
 val circeVersion = "0.13.0"
 val specs2Version = "4.3.2"
-val jacksonDatabindVersion = "2.9.10.8"
+val jacksonDatabindVersion = "2.12.6.1"
 
 enablePlugins(RiffRaffArtifact)
 
@@ -35,7 +35,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
-      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.4.0",
+      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.5.1",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test"
     ),
