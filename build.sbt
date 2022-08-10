@@ -5,11 +5,6 @@ val jacksonDatabindVersion = "2.13.2.1"
 
 enablePlugins(RiffRaffArtifact)
 
-assemblyMergeStrategy in assembly := {
-  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case x => MergeStrategy.first
-}
-
 lazy val root = (project in file("."))
   .settings(
     name := "ArchiveHunterProxyLambdas"
@@ -71,7 +66,7 @@ lazy val `transcoderReplyLambda` = (project in file("TranscoderReplyLambda"))
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
-      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.4.0",
+      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.5.1",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test"
     ),
@@ -99,7 +94,7 @@ lazy val `sweeperLambda` = (project in file("SweeperLambda"))
       "com.amazonaws" % "aws-java-sdk-sqs" % awsSdkVersion,
       "com.fasterxml.jackson.core" % "jackson-databind" % jacksonDatabindVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
-      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.4.0",
+      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.5.1",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test"
     ),
@@ -128,7 +123,7 @@ lazy val `ecsAlertLambda` = (project in file("ECSAlertLambda"))
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
       "org.slf4j" % "slf4j-api" % "1.7.25",
-      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.4.0",
+      "com.amazonaws" % "aws-lambda-java-log4j2" % "1.5.1",
       "org.specs2" %% "specs2-core" % specs2Version % "test",
       "org.specs2" %% "specs2-mock" % specs2Version % "test",
       //fixes for vulnerable dependencies
