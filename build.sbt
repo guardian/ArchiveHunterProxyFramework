@@ -46,7 +46,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       case "application.conf" => MergeStrategy.concat
       //META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
       case PathList("META-INF","org","apache","logging","log4j","core","config","plugins","Log4j2Plugins.dat") => MergeStrategy.last
-      case PathList("com","fasterxml","jackson") => MergeStrategy.first
+      case "module-info.class" => MergeStrategy.first
       case x=>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
