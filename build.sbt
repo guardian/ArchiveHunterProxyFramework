@@ -1,7 +1,7 @@
 val awsSdkVersion = "1.12.278"
 val circeVersion = "0.13.0"
 val specs2Version = "4.3.2"
-val jacksonDatabindVersion = "2.9.10.8"
+val jacksonDatabindVersion = "2.12.6.1"
 
 enablePlugins(RiffRaffArtifact)
 
@@ -46,6 +46,7 @@ lazy val `requestLambda` = (project in file("ProxyRequestLambda"))
       case "application.conf" => MergeStrategy.concat
       //META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat
       case PathList("META-INF","org","apache","logging","log4j","core","config","plugins","Log4j2Plugins.dat") => MergeStrategy.last
+      case PathList("com","fasterxml","jackson") => MergeStrategy.first
       case x=>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
