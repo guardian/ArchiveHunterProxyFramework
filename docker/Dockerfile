@@ -1,10 +1,16 @@
-FROM centos:7
+FROM centos:centos8
 
+RUN cd /etc/yum.repos.d/
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 RUN yum -y clean all && yum -y update && yum -y install epel-release \
     && rpm --import http://li.nux.ro/download/nux/RPM-GPG-KEY-nux.ro \
     && rpm -Uvh http://li.nux.ro/download/nux/dextop/el7/x86_64/nux-dextop-release-0-5.el7.nux.noarch.rpm \
-    && yum -y install ffmpeg python python-pip curl file ImageMagick sox gnuplot && yum -y clean all && rm -rf /var/cache/yum
-RUN pip install awscli requests==2.26.0 boto3 && mkdir -p /usr/local/share/thumbnailer
+    && yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm \
+    && yum -y install https://download1.rpmfusion.org/free/el/rpmfusion-free-release-8.noarch.rpm https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-8.noarch.rpm \
+    && yum -y install http://rpmfind.net/linux/epel/7/x86_64/Packages/s/SDL2-2.0.14-2.el7.x86_64.rpm \
+    && yum -y install ffmpeg python3 python3-pip curl file ImageMagick sox gnuplot dnf-plugins-core && yum -y clean all && rm -rf /var/cache/yum
+RUN pip3 install awscli requests boto3 && mkdir -p /usr/local/share/thumbnailer
 COPY scripts/extract_video_thumbnail.sh /usr/local/bin/extract_video_thumbnail.sh
 COPY scripts/extract_audio_thumbnail.sh /usr/local/bin/extract_audio_thumbnail.sh
 COPY scripts/extract_image_thumbnail.sh /usr/local/bin/extract_image_thumbnail.sh
@@ -13,6 +19,7 @@ COPY scripts/analyze_media_file.py /usr/local/bin/analyze_media_file.py
 COPY scripts/audio.gpi /usr/local/share/thumbnailer/audio.gpi
 COPY scripts/extract_thumbnail.sh /usr/local/bin/extract_thumbnail.sh
 RUN chmod a+x /usr/local/bin/extract_*.sh
+RUN yum config-manager --set-enabled powertools
 COPY docker_install.sh /root
 RUN chmod a+x /root/docker_install.sh
 RUN /root/docker_install.sh
