@@ -18,7 +18,7 @@ fi
 GNUPLOT_EXIT=-1
 if [ "$SOX_EXIT" == "0" ]; then
     echo Plotting waveform...
-    gnuplot /usr/local/share/thumbnailer/audio.gpi > /tmp/logfile 2>&1
+    gnuplot /usr/local/bin/audio.gpi > /tmp/logfile 2>&1
     GNUPLOT_EXIT=$?
 fi
 
