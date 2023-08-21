@@ -26,7 +26,7 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       shell: bash
       run: |
-        echo GITHUB_RUN_NUMBER=$(( GITHUB_RUN_NUMBER + 102 ))>> $GITHUB_ENV
+        echo GITHUB_RUN_NUMBER=$(( GITHUB_RUN_NUMBER + 103 ))>> $GITHUB_ENV
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -42,7 +42,7 @@ jobs:
       uses: docker/setup-buildx-action@v1
 
     - name: Build
-      run: docker build docker/ -t guardianmultimedia/archivehunter-proxyimage:${{ env.GITHUB_RUN_NUMBER }}
+      run: docker build docker/ -t guardianmultimedia/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }}
 
     - name: Tag docker image
       run:  docker tag guardianmultimedia/archivehunter-proxyimage:${{ env.GITHUB_RUN_NUMBER }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/archivehunter-proxyimage:${{ env.GITHUB_RUN_NUMBER }}
