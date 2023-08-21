@@ -45,7 +45,7 @@ jobs:
       run: docker build docker/ -t guardianmultimedia/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }}
 
     - name: Tag docker image
-      run:  docker tag guardianmultimedia/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/archivehunter-proxyimage:${{ env.GITHUB_RUN_NUMBER }}
+      run:  docker tag guardianmultimedia/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }}
 
     - name: Push docker image
       run: docker push  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/archivehunter/proxyimage:${{ env.GITHUB_RUN_NUMBER }}
