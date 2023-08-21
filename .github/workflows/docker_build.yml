@@ -1,0 +1,45 @@
+name: Dockerfile CI
+
+on:
+  push:
+    paths:
+      - 'docker/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # The first two permissions are needed to interact with GitHub's OIDC Token endpoint.
+    # The second set of two permissions are needed to write test results back to GH
+    permissions:
+      id-token: write
+      contents: read
+      checks: write
+      pull-requests: write
+      packages: write
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v2
+    # GITHUB_RUN_NUMBER always starts from 1, so to maintain compatibility we adjust it here
+    - name: Make GITHUB_RUN_NUMBER env var available outside of shells
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      shell: bash
+      run: |
+        echo GITHUB_RUN_NUMBER=$(( GITHUB_RUN_NUMBER + 102 ))>> $GITHUB_ENV
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        role-session-name: GHA-build
+
+    - name: ECR Login
+      run: aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+    - name: Build and Push Docker Image
+      uses: docker/build-push-action@v2
+      with:
+        context: ./docker
+        push: true
+        tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/archivehunter-proxyimage:${{ env.GITHUB_RUN_NUMBER }}
